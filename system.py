@@ -113,7 +113,8 @@ class System3D():
     def make_pyomo_model(self, nfe: int, collocation: str, total_time: float,
                          scale_forces_by: float,
                          vary_timestep_within: Optional[Tuple[float,float]] = None,
-                         presolve_no_C: bool = False) -> None:
+                         presolve_no_C: bool = False,
+                         include_dynamics: bool = True) -> None:
         """
         vary_timestep_within:
             the upper and lower bounds for how much the unscaled timestep can change.
@@ -155,11 +156,14 @@ class System3D():
         for link in self.links:
             link.add_equations_to_pyomo_model(self.sp_variables, self.pyo_variables, collocation)
         
-        m.force_scale = Param(initialize=scale_forces_by)
-        @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))
-        def EOM_constr(m, fe, cp, i):
-            return self.eom_f[i](*self.pyo_variables[fe,cp], m.force_scale) == 0 \
-                 if not (fe==1 and cp < ncp) else Constraint.Skip
+        if include_dynamics is True:
+            m.force_scale = Param(initialize=scale_forces_by)
+            @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))
+            def EOM_constr(m, fe, cp, i):
+                return self.eom_f[i](*self.pyo_variables[fe,cp], m.force_scale) == 0 \
+                     if not (fe==1 and cp < ncp) else Constraint.Skip
+        else:
+            utils.warn('Not including dynamics (EOM_constr) in model')
 
     def save_data_to_dict(self, description: str) -> Dict[str,Any]:
         return {
@@ -291,9 +295,9 @@ class System3D():
         # certain things not being cloneable. So -> try/catch/finally block
         try:
             if self.m.hm.type() == Param:
-                t_sum = sum(self.m.hm[fe] for fe in self.m.fe if fe != 1) * self.m.hm0.value
+                t_sum = sum(self.m.hm[fe] for fe in self.m.fe if fe != nfe) * self.m.hm0.value
             else:
-                t_sum = sum(self.m.hm[fe].value for fe in self.m.fe if fe != 1) * self.m.hm0.value
+                t_sum = sum(self.m.hm[fe].value for fe in self.m.fe if fe != nfe) * self.m.hm0.value
             
             interval_ms = 1000*t_scale * (t_sum /nfe / ncp if dt is None else dt)
             frames = [fe for fe in self.m.fe] if dt is None else np.arange(start=0, stop=t_sum+dt, step=dt)
