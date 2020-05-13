@@ -1,0 +1,5 @@
+old/
+__pycache__/
+
+# Jupyter stuff
+.ipynb_checkpoints/
