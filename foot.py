@@ -1,0 +1,452 @@
+import sympy as sp, numpy as np, itertools
+from sympy import Matrix as Mat
+from typing import Any, Dict, List, Callable, Optional, Tuple, Union, Iterable
+
+from pyomo.environ import (
+    ConcreteModel, Param, Set, Var, Constraint
+)
+
+from . import utils, variable_list
+VariableList = variable_list.VariableList
+
+
+class Foot3D():
+    def __init__(self, name: str, Pb_I: Mat, nsides: int, friction_coeff: Optional[float] = None):
+        self.name = name
+        self.nsides = nsides
+        self.Pb_I = Pb_I
+        self.friction_coeff = friction_coeff
+
+        # the contact/friction stuff:
+        self.D  = friction_polygon(nsides)
+        self.Lx = Mat(sp.symbols('L_{%s/x:%s}' % (name, nsides)))
+        self.Lz = sp.Symbol('L_{%s/z}' % name)
+        self.L  = Mat(self.D).T @ self.Lx + Mat([0, 0, self.Lz])
+
+    def calc_eom(self, q, dq, ddq, Ek, Ep, M, C, G) -> None:
+        self.Pb_I_vel = self.Pb_I.jacobian(q) @ dq
+    
+    def add_vars_to_pyomo_model(self, m: ConcreteModel):
+        assert isinstance(self.friction_coeff, float), f'The friction_coeff for {self.name} must be set to a float'
+
+        # parameter and sets
+        friction_coeff = Param(initialize=self.friction_coeff, name='friction_coeff')
+        xy_set = Set(initialize=('x', 'y'), name='xy_set', ordered=True)
+        fric_set = Set(initialize=range(8), name='fric_set', ordered=True)
+
+        GRFxy = Var(m.fe, m.cp, fric_set, name='GRFxy', bounds=(0, 30))
+        GRFz  = Var(m.fe, m.cp,           name='GRFz',  bounds=(0, 30))
+
+        # dummy vars equal to parts from EOM
+        foot_height = Var(m.fe, m.cp, name='foot_height', bounds=(0, None))
+        foot_xy_vel = Var(m.fe, m.cp, xy_set, name='foot_xyvel')
+        gamma = Var(m.fe, m.cp, name='gamma', bounds=(0, None))  # foot xy-velocity magnitude
+
+        # penalty variables
+        contact_penalty = Var(m.fe, name='contact_penalty', bounds=(0, 10))
+        friction_penalty = Var(m.fe, name='friction_penalty', bounds=(0, 10))
+        slip_penalty = Var(m.fe, fric_set, name='slip_penalty', bounds=(0, 10))
+
+        self.pyomo_params: Dict[str,Param] = {
+            'friction_coeff': friction_coeff
+        }
+        self.pyomo_sets: Dict[str,Set] = {
+            'xy_set': xy_set, 'fric_set': fric_set,
+        }
+        self.pyomo_vars: Dict[str,Var] = {
+            'GRFxy': GRFxy, 'GRFz': GRFz,
+            'foot_height': foot_height, 'foot_xy_vel': foot_xy_vel, 'gamma': gamma,
+            'contact_penalty': contact_penalty,
+            'friction_penalty': friction_penalty,
+            'slip_penalty': slip_penalty,
+        }
+
+        for v in itertools.chain(self.pyomo_params.values(),
+                                 self.pyomo_sets.values(),
+                                 self.pyomo_vars.values()):
+            # v.construct()
+            # TODO: get the above working. But for now, it doesn't attach to the model :/
+            newname = f'{self.name}_{v}'
+            assert not hasattr(m, newname), f'The pyomo model already has a variable with the name "{newname}"'
+            setattr(m, newname, v)
+
+    def get_pyomo_vars(self, fe: int, cp: int):
+        """fe, cp are one-based!"""
+        # NB: keep in sync with get_sympy_vars()!!
+        v = self.pyomo_vars
+        return [*v['GRFxy'][fe,cp,:], v['GRFz'][fe,cp]]
+    
+    def get_sympy_vars(self):
+        # NB: keep in sync with get_pyomo_vars()!!
+        return [*self.Lx, self.Lz]
+
+    def save_data_to_dict(self) -> Dict[str,Any]:
+        fric_set = self.pyomo_sets['fric_set']
+
+        return {
+            'name': self.name,
+            'nsides': self.nsides,
+            'friction_coeff': self.friction_coeff,
+            'contact_penalty': utils.get_vals(self.pyomo_vars['contact_penalty']),
+            'friction_penalty': utils.get_vals(self.pyomo_vars['friction_penalty']),
+            'slip_penalty': utils.get_vals(self.pyomo_vars['slip_penalty'], (fric_set,)),
+            'foot_height': utils.get_vals(self.pyomo_vars['foot_height'], tuple()),
+            'GRFz': utils.get_vals(self.pyomo_vars['GRFz'], tuple()),
+            'GRFxy': utils.get_vals(self.pyomo_vars['GRFxy'], (fric_set,)),
+        }
+
+    def init_from_dict_one_point(self, data: Dict[str,Any], fed: int, cpd: int, fes: Optional[int] = None, cps: Optional[int] = None, **kwargs) -> None:
+        if fes is None: fes = fed - 1
+        if cps is None: cps = cpd - 1
+
+        assert self.name == data['name']
+        for attr in ('nsides', 'friction_coeff'):
+            if getattr(self, attr) != data[attr]:
+                utils.warn(f'Attribute "{attr}" of link "{self.name}" is not the same as the data: {getattr(self, attr)} != {data[attr]}')
+
+        v = self.pyomo_vars
+        utils.maybe_set_var(v['contact_penalty'][fed], data['contact_penalty'][fes], **kwargs)
+        utils.maybe_set_var(v['friction_penalty'][fed], data['friction_penalty'][fes], **kwargs)
+
+        utils.maybe_set_var(v['foot_height'][fed,cpd], data['foot_height'][fes,cps], **kwargs)
+        utils.maybe_set_var(v['GRFz'][fed,cpd], data['GRFz'][fes,cps], **kwargs)
+
+        for (idx, f) in enumerate(self.pyomo_sets['fric_set']):
+            utils.maybe_set_var(v['slip_penalty'][fed,f], data['slip_penalty'][fes,idx], **kwargs)
+            utils.maybe_set_var(v['GRFxy'][fed,cpd,f], data['GRFxy'][fes,cps,idx], **kwargs)
+
+    def add_equations_to_pyomo_model(self, sp_variables, pyo_variables: VariableList, collocation: str):
+        friction_coeff = self.pyomo_params['friction_coeff']
+        m = friction_coeff.model()
+
+        xy_set  = self.pyomo_sets['xy_set']  # foot_xy_vel below
+        fric_set = self.pyomo_sets['fric_set']
+
+        GRFxy = self.pyomo_vars['GRFxy']
+        GRFz  = self.pyomo_vars['GRFz']
+
+        foot_height = self.pyomo_vars['foot_height']
+        foot_xy_vel = self.pyomo_vars['foot_xy_vel']
+        gamma = self.pyomo_vars['gamma']
+
+        contact_penalty  = self.pyomo_vars['contact_penalty']
+        friction_penalty = self.pyomo_vars['friction_penalty']
+        slip_penalty     = self.pyomo_vars['slip_penalty']
+
+        self.foot_pos_func = utils.lambdify_EOM(self.Pb_I, sp_variables)
+        self.foot_xy_vel_func = utils.lambdify_EOM(self.Pb_I_vel[:2], sp_variables)
+
+        ncp = len(m.cp)
+
+        def add_constraints(func: Callable, indexes: tuple):
+            for index_tuple in itertools.product(*indexes):
+                m.constraints.add(func(m, *index_tuple))
+
+        def def_foot_height(m, fe, cp):    # foot height above z == 0 (xy-plane)
+            if (fe==1 and cp<ncp): return Constraint.Skip
+            return foot_height[fe,cp] == self.foot_pos_func[2](*pyo_variables[fe,cp])
+        add_constraints(def_foot_height, (m.fe, m.cp))
+
+        def def_foot_xy_vel(m, fe, cp, xy): # foot velocity in xy-plane
+            if (fe==1 and cp<ncp): return Constraint.Skip
+            i = 0 if xy == 'x' else 1
+            return foot_xy_vel[fe,cp,xy] == self.foot_xy_vel_func[i](*pyo_variables[fe,cp])
+        add_constraints(def_foot_xy_vel, (m.fe, m.cp, xy_set))
+
+        def def_gamma(m, fe, cp, i):  # this sets gamma to the biggest of vx + vy
+            if (fe==1 and cp<ncp): return Constraint.Skip
+            vx, vy = foot_xy_vel[fe,cp,'x'], foot_xy_vel[fe,cp,'y']
+            return gamma[fe,cp] >= vx * self.D[i,0] + vy * self.D[i,1]
+        add_constraints(def_gamma, (m.fe, m.cp, fric_set))
+
+        def def_friction_polyhedron(m, fe, cp):
+            if (fe==1 and cp < ncp): return Constraint.Skip
+            return friction_coeff * GRFz[fe,cp] >= sum(GRFxy[fe,cp,:])
+        add_constraints(def_friction_polyhedron, (m.fe, m.cp))
+        
+        # complementarity equations
+        # z[i+1]*GRFz[i] ≈ 0
+        def def_contact_complementarity(m, fe):
+            if fe < m.fe[-1]:
+                α = sum(foot_height[fe+1,:])
+                β = sum(GRFz[fe,:])
+                return α * β <= contact_penalty[fe]
+            else:
+                return Constraint.Skip
+        add_constraints(def_contact_complementarity, (m.fe,))
+
+        # (μ * GRFz - Σ GRFxy) * γ ≈ 0
+        def def_friction_complementarity(m, fe):
+            α = friction_coeff * sum(GRFz[fe,:]) - sum(GRFxy[fe,:,:])
+            β = sum(gamma[fe,:])
+            return α * β <= friction_penalty[fe]
+        add_constraints(def_friction_complementarity, (m.fe,))
+
+        # GRFxy * (γ + dxyᵀ*Dᵢ) ≈ 0
+        def def_slip_complementarity(m, fe, i):
+            vx, vy = foot_xy_vel[fe,:,'x'], foot_xy_vel[fe,:,'y']
+            α = sum(GRFxy[fe,:,i])
+            β = sum(gamma[fe,:]) + sum(vx)*self.D[i,0] + sum(vy)*self.D[i,1]
+            return α * β  <= slip_penalty[fe,i]
+        add_constraints(def_slip_complementarity, (m.fe, fric_set))
+
+    def __getitem__(self, varname: str) -> Var:
+        return self.pyomo_vars[varname]
+
+    def penalty_sum(self):
+        contact_penalty  = self.pyomo_vars['contact_penalty']
+        friction_penalty = self.pyomo_vars['friction_penalty']
+        slip_penalty     = self.pyomo_vars['slip_penalty']
+        return (sum(contact_penalty[:])
+                  + 0.1*sum(friction_penalty[:])
+                  + 0.1*sum(slip_penalty[:, :]))
+
+    def animation_setup(self, fig, ax, data: List[List[float]]):
+        self.has_line = False
+        self.plot_data = np.empty((len(data), 6))
+        cp = 1
+        
+        for fe0, d in enumerate(data):
+            fe = fe0 + 1
+
+            # pretty arbitrary value
+            force_scale = 1/10
+
+            x, y, z = [f(*d) for f in self.foot_pos_func]
+
+            dx, dy = 0, 0
+            for f in self.pyomo_sets['fric_set']:
+                dx, dy = [dx, dy] + self['GRFxy'][fe,cp,f].value * self.D[f,:2] * force_scale
+
+            dz = self.pyomo_vars['GRFz'][fe,cp].value * force_scale
+
+            self.plot_data[fe0, :] = (x, y, z, dx, dy, dz)
+
+
+    def animation_update(self, fig, ax, fe: Optional[int] = None,
+                         t: Optional[float] = None, t_arr: Optional[np.ndarray] = None,
+                         track: bool = False):
+        if self.has_line:
+            self.line.remove()
+            self.has_line = False
+
+        if fe is not None:
+            x, y, z, dx, dy, dz = self.plot_data[fe-1]
+        else:
+            assert t is not None and t_arr is not None
+            x, y, z, dx, dy, dz = [np.interp(t, t_arr, self.plot_data[:,i]) for i in range(6)]
+
+        self.line = ax.quiver(
+            x, y, z,    # <-- starting point of vector
+            dx, dy, dz, # <-- directions of vector
+            arrow_length_ratio=0.15,
+            color = 'red', alpha = .8, lw = 1.5,
+        )
+        self.has_line = True
+    
+    def cleanup_animation(self, fig, ax):
+        try:
+            del self.line
+        except:
+            pass
+
+    def plot(self):
+        m = self.pyomo_vars['GRFxy'].model()
+        fe = list(range(len(m.fe)))
+
+        # xy_set  = self.pyomo_sets['xy_set']  # foot_xy_vel below
+
+        fric_set = self.pyomo_sets['fric_set']
+        contact_penalty  = utils.get_vals(self.pyomo_vars['contact_penalty'])
+        friction_penalty = utils.get_vals(self.pyomo_vars['friction_penalty'])
+        slip_penalty     = utils.get_vals(self.pyomo_vars['slip_penalty'], (fric_set,))
+
+        # TODO: plot GRFxy as an xy-thing? or individual line plots?
+        # GRFxy = utils.get_vals(self.pyomo_vars['GRFxy'], (fric_set,))
+        
+        # foot_xy_vel = self.pyomo_vars['foot_xy_vel']
+        # gamma = self.pyomo_vars['gamma']
+
+        from matplotlib import pyplot as plt
+
+        plt.plot(fe, contact_penalty,  label='contact')
+        plt.plot(fe, friction_penalty, label='friction')
+        for fric in fric_set:
+            plt.plot(fe, slip_penalty[:,fric], label=f'slip_{fric}')
+
+        plt.title(f'Penalties in foot {self.name}')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+
+        fig, ax1 = plt.subplots()
+        plt.title('Foot height and ground reaction force in ' + self.name)
+        plt.grid(True)
+
+        foot_height = utils.get_vals(self.pyomo_vars['foot_height'], tuple())
+        ax1.plot(fe, foot_height, label='Foot height')
+        ax1.set_xlabel('Finite element')
+        ax1.set_ylabel('Height [m]')
+
+        ax2 = ax1.twinx()
+        GRFz = utils.get_vals(self.pyomo_vars['GRFz'], tuple())
+        # the color trick below is so that they don't both use the same color
+        ax2.plot(fe, GRFz, label='$GRFz$', color=next(ax1._get_lines.prop_cycler)['color'])
+        ax2.set_ylabel('Force [Nm/body_weight]')
+
+        fig.legend(loc='center')
+        fig.tight_layout()  # otherwise the right y-label is slightly clipped
+        plt.show()
+    
+    def __repr__(self) -> str:
+        return f'Foot3D(name="{self.name}", nsides={self.nsides}, friction_coeff={self.friction_coeff})'
+
+def friction_polygon(nsides: int) -> np.ndarray:
+    if nsides == 4:
+        # the four edges of a square - a very rough approximation to a friction cone
+        return np.array([
+             1, 0, 0,
+             0, 1, 0,
+            -1, 0, 0,
+             0,-1, 0,
+        ]).reshape(4, 3)
+
+    elif nsides == 8:
+        # for these numbers to make sense, think about moving around a square in the xy-plane,
+        # going from an axis crossing, to an edge, to the next axis crossing, etc
+        # this square gets normalized to approximate a unit circle
+        D = np.array([
+             1, 0, 0,
+             1, 1, 0,
+             0, 1, 0,
+            -1, 1, 0,
+            -1, 0, 0,
+            -1,-1, 0,
+             0,-1, 0,
+             1,-1, 0,
+        ]).reshape(8, 3)
+        return D / np.linalg.norm(D, axis=1).reshape(8, 1)  # normalize by row
+    else:
+        raise ValueError('Only 4-sided and 8-sided friction polygons are implemented at the moment')
+
+def interactively_set_timings(feet: Iterable[str], nfe: int, wait_until_all_set: bool = False, **kwargs) -> List:
+    """
+    >>> interactively_set_timings([link.foot.name for link in robot.links if link.has_foot()], nfe=50, time=0.35)
+    """
+    funcs = []
+    for foot in feet:
+        funcs.append(set_timing(description=foot, nfe=nfe, **kwargs))
+    
+    if wait_until_all_set is True:
+        from time import sleep
+        while not all(f()['done'] for f in funcs):
+           sleep(0.5)
+        return [f()['values'] for f in funcs]
+
+    else:
+        return funcs
+
+def set_timing(nfe: int, *, time: Optional[float] = None, initial: Optional[Tuple] = None,
+               description: str = 'Foot timing', width: str = '500px', when_done: str = 'disable') -> Callable[[],Dict[str,Union[bool,Tuple[int,int]]]]:
+    """
+    A simple example:
+    >>> f = get_foot_timing(nfe=20, time=0.35)
+    >>> from time import sleep
+    >>> while not f()['done']: sleep(0.5)
+    >>> print('The values are:', f()['values'])
+    """
+    import ipywidgets as widgets  # pyright: reportMissingImports=false
+
+    assert when_done in ('close', 'disable')
+    
+    options = np.arange(nfe) + 1
+    
+    if time is not None:
+        options = [(f'{o/nfe * time:.3}s', o) for o in options]
+        #if initial is not None:
+        #    initial = int(initial[0] * nfe/time), int(initial[1] * nfe/time)
+    
+    if initial is None:
+        initial = (1, nfe)
+    
+    assert 1 <= initial[0] <= nfe and 1 <= initial[1] <= nfe, f'Invalid initial range: {initial}'
+    slider = widgets.SelectionRangeSlider(
+        value=initial,
+        options=options,
+        index=(0, len(options)-1),
+        description=description,
+        layout={'width': width}
+    )
+    
+    button = widgets.Button(
+        description='Click when done',
+        disabled=False,
+        button_style='',
+        tooltip='Click me',
+        icon='check'
+    )
+    
+    done = False
+    def finish_up(*args):
+        nonlocal done
+        done = True
+        
+        if when_done is 'close':
+            slider.close()
+            button.close()
+        else:
+            button.disabled = True
+            slider.disabled = True
+    
+    button.on_click(finish_up)
+    
+    from IPython.display import display
+    display(widgets.HBox([slider, button]))
+    
+    return lambda: {'done': done, 'values': slider.value}
+
+def prescribe_contact_order(feet: List[Foot3D], ground_timings: Iterable[Tuple[int,int]],
+                            min_foot_height: float = 0.005, min_GRFz: float = 0.001) -> None:
+    """
+    Prescribe `feet` to be on the ground using the ranges specified in `ground_timings`.
+    `min_foot_height` sets the lower bound for feet during the flight phase, and `min_GRFz`
+    does the same for the vertical ground reaction force during the stance phase.
+
+    >>> feet = [link.foot for link in robot.links if link.has_foot()]
+    >>> foot_order_vals = ((1, 9), (7, 15), (28, 37), (35, 43))  # corresponds to finite elements
+    >>> list(zip(feet, foot_order_vals))
+    [(Foot3D(name="LFL_foot", nsides=8), (1, 9)),
+     (Foot3D(name="LFR_foot", nsides=8), (7, 15)),
+     (Foot3D(name="LBL_foot", nsides=8), (28, 37)),
+     (Foot3D(name="LBR_foot", nsides=8), (35, 43))]
+    >>> prescribe_contact_order(feet, foot_order_vals)
+    """
+    inclusive_range = lambda start, stop: range(start, stop+1)
+    m = feet[0]['GRFz'].model()
+    nfe = len(m.fe)
+    
+    def foot_fix_util(foot: Foot3D, start: int, stop: int):
+        GRFz = foot['GRFz']
+        foot_height = foot['foot_height']
+        
+        # phase 1: flight
+        for fe in inclusive_range(1, start-1):
+            for cp in m.cp:
+                foot_height[fe, cp].setlb(min_foot_height)
+                GRFz[fe, cp].fix(0)
+
+        # phase 2: stance
+        for fe in inclusive_range(start+1, stop-1):
+            for cp in m.cp:
+                foot_height[fe, cp].fix(0)
+                GRFz[fe, cp].setlb(min_GRFz)
+
+        # phase 3: flight
+        for fe in inclusive_range(stop+1, nfe):
+            for cp in m.cp:
+                foot_height[fe, cp].setlb(min_foot_height)
+                GRFz[fe, cp].fix(0)
+    
+    for foot, (start, stop) in zip(feet, ground_timings):
+        foot_fix_util(foot, start, stop)
