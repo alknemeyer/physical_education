@@ -214,7 +214,7 @@ def lambdify_EOM(EOM: Union[sp.Matrix,list], vars_in_EOM: List[sp.Symbol], *,
         except:
             print(vars_in_EOM)
     
-    func_map = [{'sin': pyomo.environ.sin, 'cos': pyomo.environ.cos}]
+    func_map = [{'sin': pyomo.environ.sin, 'cos': pyomo.environ.cos, 'pi': np.pi}]
     
     if isinstance(EOM, list):
         eom = sp.Matrix(EOM)
@@ -538,6 +538,7 @@ def plot3d_setup(figsize=(10, 10),
                  height: float = 5.0,
                  show_grid: bool = True,
                  plot_ground: bool = True,
+                 xyz_labels = Optional[Tuple[str,str,str]],
                  ground_lims: Optional[Tuple[Tuple,Tuple]] = None,
                  scale_plot_size: bool = True):
     """Set up a fairly "standard" figure for a 3D system, including:
@@ -558,10 +559,26 @@ def plot3d_setup(figsize=(10, 10),
     if len(title) > 0:
         fig.suptitle(title, fontsize=20)
     
-    ax.set_xlim(-lim, lim)
-    ax.set_ylim(-lim, lim)
-    ax.set_zlim(0, height)
-    ax.set_xlabel('$X$ [m]'); ax.set_ylabel('$Y$ [m]'); ax.set_zlabel('$Z$ [m]')
+    # TODO: in future, set globally like so: https://stackoverflow.com/questions/3899980/how-to-change-the-font-size-on-a-matplotlib-plot
+    # ax.set_xlim(-lim, lim)
+    # ax.set_ylim(-lim, lim)
+    # ax.set_zlim(0, height)
+    if xyz_labels is None:
+        ax.set_xlabel('$X$ [m]') #, fontname='Times New Roman')
+        ax.set_ylabel('$Y$ [m]') #, fontname='Times New Roman')
+        ax.set_zlabel('$Z$ [m]') #, fontname='Times New Roman')
+    else:
+        ax.set_xlabel(xyz_labels[0])
+        ax.set_ylabel(xyz_labels[1])
+        ax.set_zlabel(xyz_labels[2])
+        xyz_labels
+
+    # plt.rcParams['pdf.fonttype'] = 42
+    # plt.rcParams['font.family'] = 'serif'
+    # plt.rcParams['font.serif'] = 'Times New Roman'
+    
+    # for label in (ax.get_xticklabels() + ax.get_yticklabels() + ax.get_zticklabels()):
+    #     label.set_fontname('Times New Roman')
     
     if show_grid is False:
         ax.grid(False)     # hide grid lines
