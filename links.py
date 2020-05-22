@@ -19,6 +19,15 @@ from .variable_list import VariableList
 _Link3D = TypeVar('Link3D', bound='Link3D')
 
 class Link3D():
+    __slots__ = [
+        'name', 'is_base',
+        'mass_sym', 'length_sym', 'radius_sym', 'mass', 'length', 'radius',
+        'q', 'dq', 'ddq', 'Rb_I', 'inertia', 'Pb_I', 'top_I', 'bottom_I',
+        'input_torques', 'torques_on_body', 'constraint_forces', 'angle_constraints',
+        '_plot_config', 'meta', 'foot',
+        'pyomo_sets', 'pyomo_vars', 'pyomo_params',
+        'top_I_func', 'bottom_I_func', 'line', 'plot_data',
+    ]
     def __init__(self, name: str, aligned_along: str, *,
                  start_I: Optional[Mat] = None, base: bool = False, meta: Iterable[str] = tuple(),
                  mass: Optional[float] = None, length: Optional[float] = None, radius: Optional[float] = None):
@@ -88,14 +97,14 @@ class Link3D():
             self.Pb_I = self.top_I - self.Rb_I @ offset_b
 
         self.bottom_I = self.Pb_I - self.Rb_I @ offset_b
-        
+
         # defining other things for later use
         self.input_torques: List = []
         self.torques_on_body = Mat([0, 0, 0])
 
         self.constraint_forces: List = []
         self.angle_constraints: List = []
-        self._plot_config: Dict = {'shape': 'line', 'linewidth': 2}
+        self._plot_config: Dict[str] = {'shape': 'line', 'linewidth': 2}
 
         self.meta: Set[str] = set(meta)
 
@@ -326,23 +335,29 @@ class Link3D():
             self.foot.init_from_dict_one_point(data['foot'], fed, cpd, fes, cps, **kwargs)
 
     # Optional[Union[Literal['line'],Literal['box']]]
-    def plot_config(self, *, shape: Optional[str] = None, linewidth: Optional[float] = None) -> 'Link3D':
+    def plot_config(self, *, color: Optional[str] = None,
+                             shape: Optional[str] = None,
+                             linewidth: Optional[float] = None) -> 'Link3D':
         """Configuration for how this link should be plotted"""
         # TODO: Still thinking about what's actually useful here. Not sure if this is a
         # wise move - I essentially am just overwriting defaults, to some extent?
+        if color is not None:
+            self._plot_config['color'] = color
+
         if shape is not None:
             assert shape in ('line', 'box')
             self._plot_config['shape'] = shape
+            raise NotImplementedError('Get round to adding this!')
+
         if linewidth is not None:
             self._plot_config['linewidth'] = linewidth
-        
-        raise NotImplementedError('Get round to adding this!')
+
         return self
 
-    def animation_setup(self, fig, ax, data: List[List[float]]):
-        #if self._plot_config['shape'] == 'box':
-        #    self.box_edges = [ax.plot([],[],[], linewidth=2, color='black')[0] for i in range(12)]
-        self.line = ax.plot([], [], [], linewidth=2)[0]
+    def animation_setup(self, fig, ax, data: List[List[float]]):        
+        self.line = ax.plot([], [], [],
+                            linewidth=self._plot_config['linewidth'],
+                            color=self._plot_config['color'])[0]
 
         self.plot_data = [np.empty((len(data), 3)),
                           np.empty((len(data), 3))]
@@ -352,7 +367,7 @@ class Link3D():
 
         if self.has_foot():
             self.foot.animation_setup(fig, ax, data)
-    
+
     def animation_update(self, fig, ax, fe: Optional[int] = None,
                          t: Optional[float] = None, t_arr: Optional[np.ndarray] = None,
                          track: bool = False):

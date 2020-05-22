@@ -11,6 +11,14 @@ VariableList = variable_list.VariableList
 
 
 class Foot3D():
+    __slots__ = [
+        'name', 'nsides', 'Pb_I', 'friction_coeff', 'D', 'Lx', 'Lz', 'L',
+        'Pb_I_vel',
+        'pyomo_params', 'pyomo_sets', 'pyomo_vars',
+        'foot_pos_func', 'foot_xy_vel_func',
+        'plot_data', 'has_line',
+    ]
+
     def __init__(self, name: str, Pb_I: Mat, nsides: int, friction_coeff: Optional[float] = None):
         self.name = name
         self.nsides = nsides
@@ -22,6 +30,8 @@ class Foot3D():
         self.Lx = Mat(sp.symbols('L_{%s/x:%s}' % (name, nsides)))
         self.Lz = sp.Symbol('L_{%s/z}' % name)
         self.L  = Mat(self.D).T @ self.Lx + Mat([0, 0, self.Lz])
+
+        self._plot_config: Dict[str] = {'plot_forces': True, 'force_scale': 1/10}
 
     def calc_eom(self, q, dq, ddq, Ek, Ep, M, C, G) -> None:
         self.Pb_I_vel = self.Pb_I.jacobian(q) @ dq
@@ -201,16 +211,29 @@ class Foot3D():
                   + 0.1*sum(friction_penalty[:])
                   + 0.1*sum(slip_penalty[:, :]))
 
+    # Optional[Union[Literal['line'],Literal['box']]]
+    def plot_config(self, *, plot_forces: Optional[bool] = None,
+                             force_scale: Optional[float] = None) -> 'Foot3D':
+        """Configuration for how this link should be plotted"""
+        if plot_forces is not None:
+            self._plot_config['plot_forces'] = plot_forces
+        
+        if force_scale is not None:
+            self._plot_config['force_scale'] = force_scale
+
+        return self
+
     def animation_setup(self, fig, ax, data: List[List[float]]):
+        if self._plot_config['plot_forces'] is False:
+            return
+        
         self.has_line = False
         self.plot_data = np.empty((len(data), 6))
         cp = 1
-        
+        force_scale = self._plot_config['force_scale']
+
         for fe0, d in enumerate(data):
             fe = fe0 + 1
-
-            # pretty arbitrary value
-            force_scale = 1/10
 
             x, y, z = [f(*d) for f in self.foot_pos_func]
 
@@ -223,9 +246,14 @@ class Foot3D():
             self.plot_data[fe0, :] = (x, y, z, dx, dy, dz)
 
 
-    def animation_update(self, fig, ax, fe: Optional[int] = None,
-                         t: Optional[float] = None, t_arr: Optional[np.ndarray] = None,
+    def animation_update(self, fig, ax,
+                         fe: Optional[int] = None,
+                         t: Optional[float] = None,
+                         t_arr: Optional[np.ndarray] = None,
                          track: bool = False):
+        if self._plot_config['plot_forces'] is False:
+            return
+        
         if self.has_line:
             self.line.remove()
             self.has_line = False
