@@ -34,6 +34,11 @@ def flatten(ls: Iterable[Iterable[T]]) -> List[T]:
     return [item for sublist in ls for item in sublist]
 
 class System3D():
+    __slots__ = [
+        'name', 'links', 'force_scale',
+        'sp_variables', 'eom_f', 'eom_no_c_f', 'm', 'py_variables',
+    ]
+    
     def __init__(self, name: str, links: List[Link3D]) -> None:
         self.name = name
         self.links = links
@@ -222,9 +227,59 @@ class System3D():
         
         raise KeyError(f'No link with name "{linkname}". Available links are: {", ".join(link.name for link in self.links)}')
 
-    def animate(self, view_along: Union[Tuple[float,float],str], t_scale: float = 1., camera: Optional[tuple] = None,
-                plot3d_config: Dict = {}, lims: Optional[Tuple[Tuple,Tuple,Tuple]] = None, track: Optional[str] = None,
-                dt: Optional[float] = None):
+    def plot_keyframes(self,
+                       keyframes: List[int],
+                       view_along: Union[Tuple[float,float],str],
+                       plot3d_config: Dict = {},
+                       filename: Optional[str] = None,
+                       lims: Optional[Tuple[Tuple,Tuple,Tuple]] = None):
+        from mpl_toolkits import mplot3d  # need to import this to get 3D plots working, for some reason
+
+        fig, ax, add_ground = utils.plot3d_setup(scale_plot_size=False, **plot3d_config)
+
+        if lims is not None:
+            x, y, z = lims
+            ax.set_xlim(*x)
+            ax.set_ylim(*y)
+            ax.set_zlim(*z)
+        
+        utils.set_view(ax, along=view_along)
+
+        ncp = len(self.m.cp)
+
+        cp = ncp
+        data: List[List[float]] = [
+            [v.value for v in self.pyo_variables[fe,cp]]
+            for fe in self.m.fe  # type: ignore
+        ]
+
+        try:
+            add_ground((ax.get_xlim(), ax.get_ylim()), color='gray')
+            for fe in keyframes:
+                for link in self.links:
+                    link.animation_setup(fig, ax, data)
+                    link.animation_update(fig, ax, fe=fe, track=False)
+            
+            if filename is not None:
+                fig.savefig('robot_keyframes.pdf')
+        
+        except Exception as e:
+            utils.error(f'Interrupted keyframes due to error: {e}')
+        
+        finally:
+            for link in self.links:
+                link.cleanup_animation(fig, ax)
+            del fig, ax
+
+    def animate(self, view_along: Union[Tuple[float,float],str],
+                      t_scale: float = 1.,
+                      camera: Optional[Tuple] = None,
+                      lim: Optional[float] = None,
+                      plot3d_config: Dict = {},
+                      lims: Optional[Tuple[Tuple,Tuple,Tuple]] = None,
+                      track: Optional[str] = None,
+                      dt: Optional[float] = None,
+                      keyframes: Optional[List[int]] = None):
         from mpl_toolkits import mplot3d  # need to import this to get 3D plots working, for some reason
         import matplotlib.animation
         from matplotlib import pyplot as plt
@@ -252,8 +307,8 @@ class System3D():
         for link in self.links:
             link.animation_setup(fig, ax, data)
 
-        #if type(camera) == tuple:
-        #    utils.track_pt(ax, camera, lim)
+        if camera is not None and lim is not None:
+            utils.track_pt(ax, camera, lim)
 
         def progress_bar(proportion: float, width: int = 80):
             import sys
@@ -414,28 +469,8 @@ class System3D():
                 utils.debug(f'init_from_robot: skipped variables because they are fixed: {skipped_vars}')
 
     def feet(self):
+        # TODO: if this isn't in fact silly, add things like .upperlegs(), .lowerlegs(), etc
         return [link.foot for link in self.links if link.has_foot()]
-#         """Maybe a bit silly, but this would allow things like,
-#         >>> robot.feet().penalties()
-#         TODO: if this isn't in fact silly, add things like .upperlegs(), .lowerlegs(), etc
-#         """
-#         class _Feet:
-#             def __init__(self, feet: List):
-#                 self.feet = feet
-#             def __getattr__(self, name: str):
-#                 if name.startswith('_'):
-#                     return super(_Feet, self).__getattribute__(name)
-#                 else:
-#                     self.cur_attr = name
-#                     return self
-#             def __call__(self, *args, **kwargs):
-#                 return [
-#                     getattr(foot, self.cur_attr)(*args, **kwargs)
-#                     for foot in self.feet
-#                 ]
-#             def __repr__(self) -> str:
-#                 return f'_Feet(cur_attr="{self.cur_attr}")'
-#         return _Feet([link for link in self.links if link.has_foot()])
 
     def __repr__(self) -> str:
         child_links = '\n  '.join(str(link) + ',' for link in self.links)
