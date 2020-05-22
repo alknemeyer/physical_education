@@ -18,6 +18,9 @@ def quadruped3D() -> Tuple[System3D,Callable[[System3D],None]]:
     body_F = Link3D('base_F', '+x', start_I=body_B.bottom_I, mass=13., radius=0.08, length=0.31,
                     meta=['spine', 'front'])
 
+    body_B.add_hookes_joint(body_F, about='xy')\
+        .add_input_torques_at(body_F, about='xy')
+
     tail0 = Link3D('tail0', '-x', start_I=body_B.top_I, mass=0.4, radius=0.005, length=0.38,
                    meta=['tail'])
     tail1 = Link3D('tail1', '-x', start_I=tail0.bottom_I, mass=0.2, radius=0.005, length=0.38,
