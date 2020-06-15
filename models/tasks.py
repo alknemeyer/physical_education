@@ -15,7 +15,7 @@ def drop_test(robot, *, z_rot: float, min_torque: bool, initial_height: float = 
     
     tested_models = ('3D monoped', '3D biped', '3D quadruped', '3D prismatic monoped')
     if not robot.name in tested_models:
-        utils.warn('This ')
+        utils.warn('This robot configuration hasn\'t been tested!')
 
     body = robot['base_B'] if robot.name == '3D quadruped' else robot['base']
 
