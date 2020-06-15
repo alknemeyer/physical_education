@@ -11,7 +11,6 @@ from . import utils, variable_list
 from .links import Link3D
 from . import collocation as _collocation
 
-_System3D = TypeVar('System3D', bound='System3D')
 T = TypeVar('T')
 
 # TODO: parsimp stuff!
@@ -34,14 +33,15 @@ def flatten(ls: Iterable[Iterable[T]]) -> List[T]:
     return [item for sublist in ls for item in sublist]
 
 class System3D():
-    __slots__ = [
-        'name', 'links', 'force_scale',
-        'sp_variables', 'eom_f', 'eom_no_c_f', 'm', 'py_variables',
-    ]
+#     __slots__ = [
+#         'name', 'links', 'force_scale',
+#         'sp_variables', 'eom_f', 'eom_no_c_f', 'm', 'py0_variables',
+#     ]
     
     def __init__(self, name: str, links: List[Link3D]) -> None:
         self.name = name
         self.links = links
+        self.m: Union[ConcreteModel,None] = None
     
     def add_link(self, link: Link3D) -> None:
         self.links.append(link)
@@ -388,7 +388,7 @@ class System3D():
             for link in self.links:
                 link.plot()
 
-    def init_from_robot(self, source: _System3D, interpolation: str = 'linear'):
+    def init_from_robot(self, source: 'System3D', interpolation: str = 'linear'):
         """
         Initialize a model from a solved one, interpolating values if needed
         """
@@ -498,7 +498,7 @@ class System3D():
             log_infeasible_bounds(self.m)
 
     # Figure out how to handle constraints etc with this presolve approach. Eg min distance, etc
-    def presolve(self, collocation: str, nfe: int, setup_func: Callable[[_System3D],None], no_C: bool,
+    def presolve(self, collocation: str, nfe: int, setup_func: Callable[['System3D'],None], no_C: bool,
                  make_pyomo_model_kwargs: dict = {}, default_solver_kwargs: dict = {}):
         """
         Create a new (simpler) model, solve it, then copy over the (interpolated) values

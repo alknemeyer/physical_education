@@ -16,7 +16,6 @@ from .variable_list import VariableList
 #       creating_sympy_model, created_sympy_model, creating_pyomo_model, created_pyomo_model
 #       optimization_has_run
 # TODO: think of a different way to track stuff during animation
-_Link3D = TypeVar('Link3D', bound='Link3D')
 
 class Link3D():
     __slots__ = [
@@ -104,7 +103,9 @@ class Link3D():
 
         self.constraint_forces: List = []
         self.angle_constraints: List = []
-        self._plot_config: Dict[str] = {'shape': 'line', 'linewidth': 2}
+        self._plot_config: Dict[str] = {'shape': 'line',
+                                        'linewidth': 2,
+                                        'color': 'tab:orange'}
 
         self.meta: Set[str] = set(meta)
 
@@ -147,7 +148,7 @@ class Link3D():
 
         return self
     
-    def add_input_torques_at(self, otherlink: _Link3D, about: str) -> _Link3D:
+    def add_input_torques_at(self, otherlink: 'Link3D', about: str) -> 'Link3D':
         """ Add input torques between two links, about axis `about` if `self`
         >>> link_body.add_input_torques_at(link_UFL, about='xy')
         TODO: THINK MORE ABOUT WHAT THIS REALLY MEANS! The second torque should really be rotated
@@ -354,7 +355,7 @@ class Link3D():
 
         return self
 
-    def animation_setup(self, fig, ax, data: List[List[float]]):        
+    def animation_setup(self, fig, ax, data: List[List[float]]):
         self.line = ax.plot([], [], [],
                             linewidth=self._plot_config['linewidth'],
                             color=self._plot_config['color'])[0]
