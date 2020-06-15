@@ -9,13 +9,13 @@ def quadruped3D() -> Tuple[System3D,Callable[[System3D],None]]:
     A model of cheetah 6 from Functional anatomy of the cheetah (Acinonyx jubatus) forelimb and hindlimb
     doi: 10.1111/j.1469-7580.2011.01344.x and 10.1111/j.1469-7580.2010.01310.x
 
-    Roughly 500 000 operations in the equations of motion without simplification, and 99 409 if simplified with
+    Roughly 500 000 operations in the equations of motion without simplification, and 142 520 if simplified with
     >>> robot.calc_eom(simp_func = lambda x: utils.parsimp(x, nprocs = 14))
     """
     # create front and back links of body and tail
-    body_B = Link3D('base_B', '+x', base=True, mass=13., radius=0.08, length=0.31,
+    body_B = Link3D('base_B', '+x', base=True, mass=17., radius=0.08, length=0.41,
                     meta=['spine', 'back'])
-    body_F = Link3D('base_F', '+x', start_I=body_B.bottom_I, mass=13., radius=0.08, length=0.31,
+    body_F = Link3D('base_F', '+x', start_I=body_B.bottom_I, mass=8., radius=0.08, length=0.21,
                     meta=['spine', 'front'])
 
     body_B.add_hookes_joint(body_F, about='xy')\
