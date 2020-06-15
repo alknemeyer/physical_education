@@ -189,7 +189,8 @@ def calc_velocities_and_energies(
     return Ek, Ep, dPs, ang_vels
 
 def lambdify_EOM(EOM: Union[sp.Matrix,list], vars_in_EOM: List[sp.Symbol], *,
-                 display_vars: bool = False, test_func: bool = True) -> List[Callable[...,float]]:
+                 display_vars: bool = False, test_func: bool = True,
+                 func_map: dict = {}) -> List[Callable[...,float]]:
     """ Returns a list of functions which, when called with arguments which match
     `vars_in_EOM`, will evaluate the equations of motion specified in `EOM`.
     `display_vars` specifies whether to print out `vars_in_EOM` as a sanity check.
@@ -214,7 +215,9 @@ def lambdify_EOM(EOM: Union[sp.Matrix,list], vars_in_EOM: List[sp.Symbol], *,
         except:
             print(vars_in_EOM)
     
-    func_map = [{'sin': pyomo.environ.sin, 'cos': pyomo.environ.cos, 'pi': np.pi}]
+    func_map = {'sin': pyomo.environ.sin,
+                'cos': pyomo.environ.cos,
+                'pi': np.pi, **func_map}
     
     if isinstance(EOM, list):
         eom = sp.Matrix(EOM)
@@ -227,7 +230,7 @@ def lambdify_EOM(EOM: Union[sp.Matrix,list], vars_in_EOM: List[sp.Symbol], *,
         raise ValueError('Some symbols in the eom aren\'t in `vars_in_EOM:'
                          + str(set(eom.free_symbols).difference(set(vars_in_EOM))))
     
-    funcs = [sp.lambdify(vars_in_EOM, eqn, modules=func_map) for eqn in eom]
+    funcs = [sp.lambdify(vars_in_EOM, eqn, modules=[func_map]) for eqn in eom]
     
     # replace with set(EOM.free_symbols).difference(set(vars_in_EOM))?
     if test_func is True:
@@ -538,7 +541,7 @@ def plot3d_setup(figsize=(10, 10),
                  height: float = 5.0,
                  show_grid: bool = True,
                  plot_ground: bool = True,
-                 xyz_labels = Optional[Tuple[str,str,str]],
+                 xyz_labels: Optional[Tuple[str,str,str]] = None,
                  ground_lims: Optional[Tuple[Tuple,Tuple]] = None,
                  scale_plot_size: bool = True):
     """Set up a fairly "standard" figure for a 3D system, including:
