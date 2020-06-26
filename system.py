@@ -65,31 +65,39 @@ class System3D():
             getattrs(self.links, 'inertia'),
             q, dq, g=9.81
         )
-        Ek = simp_func(Ek); Ep = simp_func(Ep)#; ang_vels = simp_func(ang_vels)
+        Ek = simp_func(Ek)
+        Ep = simp_func(Ep)
+        # ang_vels = simp_func(ang_vels)
 
         M, C, G = utils.manipulator_equation(Ek, Ep, q, dq)
-        M = simp_func(M); C = simp_func(C); G = simp_func(G)
+        M = simp_func(M)
+        C = simp_func(C)
+        G = simp_func(G)
 
         # get angular constraints
         angle_constraints = Mat(flatten(link.angle_constraints for link in self.links))
-        J_c = angle_constraints.jacobian(q)
+        # J_c = angle_constraints.jacobian(q)
         Fr = Mat(flatten(link.constraint_forces for link in self.links))
 
         # foot stuff
         feet = [link.foot for link in self.links if link.has_foot()]
-        L = Mat([foot.L for foot in feet])
-        jac_L = Mat([foot.Pb_I for foot in feet]).jacobian(q)
+        # L = Mat([foot.L for foot in feet])
+        # jac_L = Mat([foot.Pb_I for foot in feet]).jacobian(q)
 
         # generalized forces
-        dW_total = Mat([
-            sum([Mat(link.torques_on_body).dot(ang_vel)
-                for (link, ang_vel) in zip(self.links, ang_vels)])
-        ])
-        Q = dW_total.jacobian(dq).T
+        # dW_total = Mat([
+        #     sum([Mat(link.torques_on_body).dot(ang_vel)
+        #         for (link, ang_vel) in zip(self.links, ang_vels)])
+        # ])
+        # Q = dW_total.jacobian(dq).T
+
+        Q = sp.zeros(*q.shape)
+        for link, ang_vel in zip(self.links, ang_vels):
+            Q += link.calc_eom(q, dq, ddq, ang_vel, Ek, Ep, M, C, G)
         B = simp_func(Q)
 
-        eom: Mat   = M @ ddq + C + G - B - jac_L.T @ L - J_c.T @ Fr
-        eom_c: Mat = M @ ddq +     G - B - jac_L.T @ L - J_c.T @ Fr
+        eom: Mat   = M @ ddq + C + G - B
+        eom_c: Mat = M @ ddq +     G - B
 
         self.force_scale = sp.Symbol('F_{scale}')
         to_sub = {force: force*self.force_scale for force in [
@@ -109,11 +117,14 @@ class System3D():
         utils.info(f'Number of operations in EOM is {sp.count_ops(eom)}')
 
         # TODO: the lambdifying step actually takes quite long -- any way to speed it up?
-        self.eom_f = utils.lambdify_EOM(eom, self.sp_variables + [self.force_scale])
-        self.eom_no_c_f = utils.lambdify_EOM(eom_c, self.sp_variables + [self.force_scale])
-
-        for link in self.links:
-            link.calc_eom(q, dq, ddq, Ek, Ep, M, C, G)
+        from pyomo.environ import atan
+        func_map = {
+            'sqrt': lambda x: (x+1e-9)**(1/2),
+            'atan': atan,
+            'atan2': lambda y, x: 2 * atan(y/((x**2 + y**2 + 1e-9)**(1/2) + x))
+        }
+        self.eom_f = utils.lambdify_EOM(eom, self.sp_variables + [self.force_scale], func_map=func_map)
+        self.eom_no_c_f = utils.lambdify_EOM(eom_c, self.sp_variables + [self.force_scale], func_map=func_map)
     
     def make_pyomo_model(self, nfe: int, collocation: str, total_time: float,
                          scale_forces_by: float,
@@ -231,7 +242,8 @@ class System3D():
                        keyframes: List[int],
                        view_along: Union[Tuple[float,float],str],
                        plot3d_config: Dict = {},
-                       filename: Optional[str] = None,
+                       save_to: Optional[str] = None,
+                       ground_color: str = 'lightgray',
                        lims: Optional[Tuple[Tuple,Tuple,Tuple]] = None):
         from mpl_toolkits import mplot3d  # need to import this to get 3D plots working, for some reason
 
@@ -254,14 +266,21 @@ class System3D():
         ]
 
         try:
-            add_ground((ax.get_xlim(), ax.get_ylim()), color='gray')
+            add_ground((ax.get_xlim(), ax.get_ylim()), color=ground_color)
             for fe in keyframes:
-                for link in self.links:
+                # iterate in reverse as matplotlib plots that last things on top, and we want
+                # the body on top. Luckily, this also sorts out left vs right for the 3D
+                # quadruped model, but it's a bad hack in general :/
+                # a better approach would be to sort the order of the links such that those
+                # furthest from the camera are plotted first
+                # the best would obviously be if matplotlib's 3D plotting was improved, or if
+                # we switch libraries
+                for link in self.links[::-1]:
                     link.animation_setup(fig, ax, data)
                     link.animation_update(fig, ax, fe=fe, track=False)
             
-            if filename is not None:
-                fig.savefig('robot_keyframes.pdf')
+            if save_to is not None:
+                fig.savefig(save_to)
         
         except Exception as e:
             utils.error(f'Interrupted keyframes due to error: {e}')
@@ -279,6 +298,7 @@ class System3D():
                       lims: Optional[Tuple[Tuple,Tuple,Tuple]] = None,
                       track: Optional[str] = None,
                       dt: Optional[float] = None,
+                      save_to: Optional[str] = None,
                       keyframes: Optional[List[int]] = None):
         from mpl_toolkits import mplot3d  # need to import this to get 3D plots working, for some reason
         import matplotlib.animation
@@ -362,8 +382,11 @@ class System3D():
 
             plt.close(anim._fig)
 
-            from IPython.core.display import display, HTML
-            display(HTML(anim.to_html5_video()))
+            if save_to is not None:
+                anim.save(save_to)
+            else:
+                from IPython.core.display import display, HTML
+                display(HTML(anim.to_html5_video()))
         
         except Exception as e:
             progress_bar(nfe, ncp)

@@ -6,8 +6,8 @@ from pyomo.environ import (
     ConcreteModel, Param, Set, Var, Constraint
 )
 
-from . import utils, variable_list
-VariableList = variable_list.VariableList
+from . import utils
+from .variable_list import VariableList
 
 
 class Foot3D():
@@ -33,8 +33,11 @@ class Foot3D():
 
         self._plot_config: Dict[str] = {'plot_forces': True, 'force_scale': 1/10}
 
-    def calc_eom(self, q, dq, ddq, Ek, Ep, M, C, G) -> None:
+    def calc_eom(self, q, dq, ddq, ang_vel, Ek, Ep, M, C, G) -> Mat:
         self.Pb_I_vel = self.Pb_I.jacobian(q) @ dq
+
+        jac_L = self.Pb_I.jacobian(q)
+        return jac_L.T @ self.L
     
     def add_vars_to_pyomo_model(self, m: ConcreteModel):
         assert isinstance(self.friction_coeff, float), f'The friction_coeff for {self.name} must be set to a float'
