@@ -34,7 +34,7 @@ def make_ang_syms(i: str) -> Tuple[Mat, Mat, Mat]:
     Define `\\phi`, `\\theta`, `\\psi` (ϕ θ ψ) symbols and time derivatives
 
     ```
-    >>> ptp, dptp, ddptp = make_ang_syms('body')
+    >>> ptp, dptp, ddptp = make_ang_syms('test')
     >>> dptp
     Matrix([
     [  \\dot{\\phi}_{test}],

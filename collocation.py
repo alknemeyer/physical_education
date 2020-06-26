@@ -1,8 +1,18 @@
 """
     Usage is along the lines of:
+    ```
     >>> from collocation import radau_3
     >>> m.interp_q  = Constraint(m.fe, m.cp, m.vars, rule=utils.radau_3(m.q,  m.dq))
     >>> m.interp_dq = Constraint(m.fe, m.cp, m.vars, rule=utils.radau_3(m.dq, m.ddq))
+    ```
+    Or,
+    ```
+    >>> col = collocation.get_collocation_func('radau_3')
+    ```
+    Or,
+    ```
+    >>> collocation.check_collocation_method('radua_56')  # raises ValueError
+    ```
 """
 from pyomo.environ import ConcreteModel, Var, Constraint
 from typing import Dict, Callable, Tuple

@@ -595,7 +595,7 @@ def plot3d_setup(figsize=(10, 10),
         """ground_lims could be something like, (-10*lim, lim), (-lim, 10*lim)"""        
         ground = ax.plot_surface(*np.meshgrid(*ground_lims),
                                  np.zeros((2,2)),
-                                 alpha=0.5,
+                                 alpha=0.2,
                                  color=color,
                                  zorder=1)
         return ground
