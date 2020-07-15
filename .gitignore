@@ -1,5 +1,8 @@
 old/
 __pycache__/
 
+# vs code
+.vscode/
+
 # Jupyter stuff
 .ipynb_checkpoints/
