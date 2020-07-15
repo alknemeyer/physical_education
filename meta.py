@@ -1,11 +1,12 @@
-from typing import Iterable, Union
+from typing import Iterable, Set, Union
 
-VALID_META = set((
+VALID_META: Set[str] = set((
     'spine', 'leg', 'tail',
     'front', 'back',
     'left', 'right',
     'thigh', 'calf',
 ))
+
 
 def valid_meta(meta: Union[str, Iterable]):
     if isinstance(meta, str):
