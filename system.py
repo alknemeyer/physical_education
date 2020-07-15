@@ -1,21 +1,18 @@
 # from __future__ import annotations
 from typing import Any, Callable, Dict, Iterable, List, Optional, TypeVar, Tuple, Union
-import sympy as sp, numpy as np
+import sympy as sp
+import numpy as np
 from sympy import Matrix as Mat
 
 from pyomo.environ import (
     ConcreteModel, RangeSet, Param, Var, Constraint, ConstraintList
 )
 
-from . import utils, variable_list
+from . import utils, variable_list, visual
 from .links import Link3D
 from . import collocation as _collocation
 
 T = TypeVar('T')
-
-# TODO: parsimp stuff!
-# TODO: add a `robot.post_solve()` step to check penalties, which constraints failed, etc
-# TODO: replace string type annotations with actual types as soon as PyPy3 supports it!
 
 
 def getattrs(items: Iterable, attr: str) -> List:
@@ -25,40 +22,33 @@ def getattrs(items: Iterable, attr: str) -> List:
     """
     return [getattr(item, attr) for item in items]
 
-T = TypeVar('T')
+
 def flatten(ls: Iterable[Iterable[T]]) -> List[T]:
     """
     Flatten an iterable of iterables of items into a list of items
     """
     return [item for sublist in ls for item in sublist]
 
-class System3D():
-#     __slots__ = [
-#         'name', 'links', 'force_scale',
-#         'sp_variables', 'eom_f', 'eom_no_c_f', 'm', 'py0_variables',
-#     ]
-    
+
+class System3D:
     def __init__(self, name: str, links: List[Link3D]) -> None:
         self.name = name
         self.links = links
-        self.m: Union[ConcreteModel,None] = None
-    
+        self.m: Union[ConcreteModel, None] = None
+
     def add_link(self, link: Link3D) -> None:
         self.links.append(link)
-    
+
     def get_state_vars(self) -> Tuple[Mat, Mat, Mat]:
-        q   = flatten(getattrs(self.links, 'q'))
-        dq  = flatten(getattrs(self.links, 'dq'))
+        q = flatten(getattrs(self.links, 'q'))
+        dq = flatten(getattrs(self.links, 'dq'))
         ddq = flatten(getattrs(self.links, 'ddq'))
         return Mat(q), Mat(dq), Mat(ddq)
 
-    def calc_eom(self, *, simp_func: Optional[Callable[[T],T]] = None) -> None:
-        if simp_func is None:
-            simp_func = lambda x: x
-        
+    def calc_eom(self, *, simp_func: Callable[[T], T] = lambda x: x) -> None:
         q, dq, ddq = self.get_state_vars()
 
-        Ek, Ep, _, ang_vels = utils.calc_velocities_and_energies(
+        Ek, Ep, _, _ = utils.calc_velocities_and_energies(
             getattrs(self.links, 'Pb_I'),
             getattrs(self.links, 'Rb_I'),
             getattrs(self.links, 'mass_sym'),
@@ -67,7 +57,6 @@ class System3D():
         )
         Ek = simp_func(Ek)
         Ep = simp_func(Ep)
-        # ang_vels = simp_func(ang_vels)
 
         M, C, G = utils.manipulator_equation(Ek, Ep, q, dq)
         M = simp_func(M)
@@ -75,40 +64,32 @@ class System3D():
         G = simp_func(G)
 
         # get angular constraints
-        angle_constraints = Mat(flatten(link.angle_constraints for link in self.links))
-        # J_c = angle_constraints.jacobian(q)
+        angle_constraints = simp_func(Mat(
+            flatten(link.angle_constraints for link in self.links)))
         Fr = Mat(flatten(link.constraint_forces for link in self.links))
 
         # foot stuff
         feet = [link.foot for link in self.links if link.has_foot()]
-        # L = Mat([foot.L for foot in feet])
-        # jac_L = Mat([foot.Pb_I for foot in feet]).jacobian(q)
-
-        # generalized forces
-        # dW_total = Mat([
-        #     sum([Mat(link.torques_on_body).dot(ang_vel)
-        #         for (link, ang_vel) in zip(self.links, ang_vels)])
-        # ])
-        # Q = dW_total.jacobian(dq).T
 
         Q = sp.zeros(*q.shape)
-        for link, ang_vel in zip(self.links, ang_vels):
-            Q += link.calc_eom(q, dq, ddq, ang_vel, Ek, Ep, M, C, G)
+        for link in self.links:
+            Q += link.calc_eom(q, dq, ddq)
+        
         B = simp_func(Q)
 
-        eom: Mat   = M @ ddq + C + G - B
-        eom_c: Mat = M @ ddq +     G - B
+        eom: Mat = simp_func(M @ ddq + C + G - B)
+        eom_c: Mat = simp_func(M @ ddq + G - B)
 
         self.force_scale = sp.Symbol('F_{scale}')
         to_sub = {force: force*self.force_scale for force in [
-            *flatten(link.input_torques for link in self.links),
+            *flatten(link.torque.input_torques for link in self.links if link.has_torque_input()),
             *Fr,
             *flatten(foot.Lx for foot in feet),
             *[foot.Lz for foot in feet],
         ]}
 
-        eom   = simp_func(sp.Matrix([*eom, *angle_constraints]).xreplace(to_sub))
-        eom_c = simp_func(sp.Matrix([*eom_c, *angle_constraints]).xreplace(to_sub))
+        eom = sp.Matrix([*eom, *angle_constraints]).xreplace(to_sub)
+        eom_c = sp.Matrix([*eom_c, *angle_constraints]).xreplace(to_sub)
 
         self.sp_variables: List[sp.Symbol] = flatten(
             link.get_sympy_vars() for link in self.links
@@ -123,12 +104,14 @@ class System3D():
             'atan': atan,
             'atan2': lambda y, x: 2 * atan(y/((x**2 + y**2 + 1e-9)**(1/2) + x))
         }
-        self.eom_f = utils.lambdify_EOM(eom, self.sp_variables + [self.force_scale], func_map=func_map)
-        self.eom_no_c_f = utils.lambdify_EOM(eom_c, self.sp_variables + [self.force_scale], func_map=func_map)
-    
+        self.eom_f = utils.lambdify_EOM(
+            eom, self.sp_variables + [self.force_scale], func_map=func_map)
+        self.eom_no_c_f = utils.lambdify_EOM(
+            eom_c, self.sp_variables + [self.force_scale], func_map=func_map)
+
     def make_pyomo_model(self, nfe: int, collocation: str, total_time: float,
                          scale_forces_by: float,
-                         vary_timestep_within: Optional[Tuple[float,float]] = None,
+                         vary_timestep_within: Optional[Tuple[float, float]] = None,
                          presolve_no_C: bool = False,
                          include_dynamics: bool = True) -> None:
         """
@@ -136,14 +119,15 @@ class System3D():
             the upper and lower bounds for how much the unscaled timestep can change.
             Eg: given a timestep of t=50ms and vary_timestep_within=(0.8, 1.2),
             the timestep can vary from 40ms to 60ms
-        
+
         presolve_no_C:
             whether the model should be pre-solved without the centrifugal forces
         """
         _collocation.check_collocation_method(collocation)
-        
+
         if presolve_no_C:
-            raise NotImplementedError('Both EOM and EOM no C are saved to the model, but EOM no C is not used')
+            raise NotImplementedError(
+                'Both EOM and EOM no C are saved to the model, but EOM no C is not used')
 
         self.m = m = ConcreteModel(name=self.name)
 
@@ -164,24 +148,26 @@ class System3D():
         # 1: each link/body defines its own pyomo variables
         for link in self.links:
             link.add_vars_to_pyomo_model(m)
-        
+
         # 2: the variables are all combined
         self.pyo_variables = variable_list.VariableList(m, self.links)
 
         # 3: the equations of motion are all added
         for link in self.links:
-            link.add_equations_to_pyomo_model(self.sp_variables, self.pyo_variables, collocation)
-        
+            link.add_equations_to_pyomo_model(
+                self.sp_variables, self.pyo_variables, collocation)
+
         if include_dynamics is True:
             m.force_scale = Param(initialize=scale_forces_by)
+
             @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))
             def EOM_constr(m, fe, cp, i):
-                return self.eom_f[i](*self.pyo_variables[fe,cp], m.force_scale) == 0 \
-                     if not (fe==1 and cp < ncp) else Constraint.Skip
+                return self.eom_f[i](*self.pyo_variables[fe, cp], m.force_scale) == 0 \
+                    if not (fe == 1 and cp < ncp) else Constraint.Skip
         else:
             utils.warn('Not including dynamics (EOM_constr) in model')
 
-    def save_data_to_dict(self, description: str) -> Dict[str,Any]:
+    def save_data_to_dict(self, description: str) -> Dict[str, Any]:
         return {
             'name': self.name,
             'description': description,
@@ -193,75 +179,83 @@ class System3D():
         }
 
     def save_data_to_file(self, filename: str, description: str, overwrite_existing: bool = False) -> None:
-        import dill, os.path
+        import dill
+        import os.path
         if os.path.isfile(filename) and overwrite_existing is False:
             raise FileExistsError
 
         with open(filename, 'wb') as f:
             dill.dump(self.save_data_to_dict(description), f, recurse=True)
 
-    def init_from_dict_one_point(self, data: Dict[str,Any], fed: int, cpd: int, fes: Optional[int] = None, cps: Optional[int] = None, **kwargs):
+    def init_from_dict_one_point(self, data: Dict[str, Any], fed: int, cpd: int, fes: Optional[int] = None, cps: Optional[int] = None, **kwargs):
         """fed and cpd are destination (ie pyomo, and 1-indexed), fes and cps are source (ie dictionary, and 0-indexed)"""
-        if fes is None: fes = fed - 1
-        if cps is None: cps = cpd - 1
+        if fes is None:
+            fes = fed - 1
+        if cps is None:
+            cps = cpd - 1
 
-        #assert 0 <= fes < len(data['hm'])
-        #assert 1 <= fed <= len(self.m.fe) and 1 <= cpd <= len(self.m.cp)
+        # TODO: ignore this warning when accounting for differing number of finite elements
+        if not self.m.hm0.value == data['hm0']:
+            utils.warn(
+                f'init_from_dict_one_point: self.hm0 = {self.m.hm0.value} != {data["hm0"]} = data["hm0"]', once=True)
 
-        if not self.m.hm0.value == data['hm0']: # TODO: ignore this warning when accounting for differing number of finite elements
-            utils.warn(f'init_from_dict_one_point: self.hm0 = {self.m.hm0.value} != {data["hm0"]} = data["hm0"]', once=True)
-        
         if self.m.hm.type() == Var:
             utils.maybe_set_var(self.m.hm[fed], data['hm'][fes], **kwargs)
-        
+
         for link, linkdata in zip(self.links, data['links']):
-            link.init_from_dict_one_point(linkdata, fed, cpd, fes, cps, **kwargs)
-    
-    def init_from_dict(self, data: Dict[str,Any], **kwargs):
+            link.init_from_dict_one_point(
+                linkdata, fed, cpd, fes, cps, **kwargs)
+
+    def init_from_dict(self, data: Dict[str, Any], **kwargs):
         for fed, cpd in self.indices(one_based=True):
             self.init_from_dict_one_point(data, fed, cpd, **kwargs)
 
     def init_from_file(self, filename: str, **kwargs):
         import dill
+        # this could just be:
+        # >>> self.init_from_dict(dill.load(open(filename, 'rb')), **kwargs)
         with open(filename, 'rb') as f:
             data = dill.load(f)
-        
+
         self.init_from_dict(data, **kwargs)
 
-    def indices(self, one_based: bool) -> List[Tuple[int,int]]:
+    def indices(self, one_based: bool) -> List[Tuple[int, int]]:
         return utils.get_indexes_(self.m, one_based=one_based)
 
     def __getitem__(self, linkname: str) -> Link3D:
         for link in self.links:
             if link.name == linkname:
                 return link
-        
-        raise KeyError(f'No link with name "{linkname}". Available links are: {", ".join(link.name for link in self.links)}')
+
+        raise KeyError(
+            f'No link with name "{linkname}". Available links are: {", ".join(link.name for link in self.links)}')
 
     def plot_keyframes(self,
                        keyframes: List[int],
-                       view_along: Union[Tuple[float,float],str],
+                       view_along: Union[Tuple[float, float], str],
                        plot3d_config: Dict = {},
                        save_to: Optional[str] = None,
                        ground_color: str = 'lightgray',
-                       lims: Optional[Tuple[Tuple,Tuple,Tuple]] = None):
-        from mpl_toolkits import mplot3d  # need to import this to get 3D plots working, for some reason
+                       lims: Optional[Tuple[Tuple, Tuple, Tuple]] = None):
+        # need to import this to get 3D plots working, for some reason
+        from mpl_toolkits import mplot3d
 
-        fig, ax, add_ground = utils.plot3d_setup(scale_plot_size=False, **plot3d_config)
+        fig, ax, add_ground = visual.plot3d_setup(
+            scale_plot_size=False, **plot3d_config)
 
         if lims is not None:
             x, y, z = lims
             ax.set_xlim(*x)
             ax.set_ylim(*y)
             ax.set_zlim(*z)
-        
-        utils.set_view(ax, along=view_along)
+
+        visual.set_view(ax, along=view_along)
 
         ncp = len(self.m.cp)
 
         cp = ncp
         data: List[List[float]] = [
-            [v.value for v in self.pyo_variables[fe,cp]]
+            [v.value for v in self.pyo_variables[fe, cp]]
             for fe in self.m.fe  # type: ignore
         ]
 
@@ -278,49 +272,51 @@ class System3D():
                 for link in self.links[::-1]:
                     link.animation_setup(fig, ax, data)
                     link.animation_update(fig, ax, fe=fe, track=False)
-            
+
             if save_to is not None:
                 fig.savefig(save_to)
-        
+
         except Exception as e:
-            utils.error(f'Interrupted keyframes due to error: {e}')
-        
+            visual.error(f'Interrupted keyframes due to error: {e}')
+
         finally:
             for link in self.links:
                 link.cleanup_animation(fig, ax)
             del fig, ax
 
-    def animate(self, view_along: Union[Tuple[float,float],str],
-                      t_scale: float = 1.,
-                      camera: Optional[Tuple] = None,
-                      lim: Optional[float] = None,
-                      plot3d_config: Dict = {},
-                      lims: Optional[Tuple[Tuple,Tuple,Tuple]] = None,
-                      track: Optional[str] = None,
-                      dt: Optional[float] = None,
-                      save_to: Optional[str] = None,
-                      keyframes: Optional[List[int]] = None):
-        from mpl_toolkits import mplot3d  # need to import this to get 3D plots working, for some reason
+    def animate(self, view_along: Union[Tuple[float, float], str],
+                t_scale: float = 1.,
+                camera: Optional[Tuple] = None,
+                lim: Optional[float] = None,
+                plot3d_config: Dict = {},
+                lims: Optional[Tuple[Tuple, Tuple, Tuple]] = None,
+                track: Optional[str] = None,
+                dt: Optional[float] = None,
+                save_to: Optional[str] = None,
+                keyframes: Optional[List[int]] = None):
+        # need to import this to get 3D plots working, for some reason
+        from mpl_toolkits import mplot3d
         import matplotlib.animation
         from matplotlib import pyplot as plt
 
-        fig, ax, add_ground = utils.plot3d_setup(scale_plot_size=False, **plot3d_config)
+        fig, ax, add_ground = visual.plot3d_setup(
+            scale_plot_size=False, **plot3d_config)
 
         if lims is not None:
             x, y, z = lims
             ax.set_xlim(*x)
             ax.set_ylim(*y)
             ax.set_zlim(*z)
-        
-        utils.set_view(ax, along=view_along)
-        ground = add_ground(((0,0), (0,0)))
+
+        visual.set_view(ax, along=view_along)
+        ground = add_ground(((0, 0), (0, 0)))
 
         nfe = len(self.m.fe)
         ncp = len(self.m.cp)
 
         cp = ncp
         data: List[List[float]] = [
-            [v.value for v in self.pyo_variables[fe,cp]]
+            [v.value for v in self.pyo_variables[fe, cp]]
             for fe in self.m.fe  # type: ignore
         ]
 
@@ -328,7 +324,7 @@ class System3D():
             link.animation_setup(fig, ax, data)
 
         if camera is not None and lim is not None:
-            utils.track_pt(ax, camera, lim)
+            visual.track_pt(ax, camera, lim)
 
         def progress_bar(proportion: float, width: int = 80):
             import sys
@@ -338,44 +334,51 @@ class System3D():
                 sys.stdout.write(' '*width + '\r')
             else:
                 sys.stdout.write('+'*num_done + '-'*(width-num_done) + '\r')
-        
+
         if dt is None:
             def _animate(fe: int):  # fe is one-based
                 progress_bar(((fe-1)*ncp + cp)/(nfe*ncp))
-            
+
                 for link in self.links:
-                    link.animation_update(fig, ax, fe=fe, track=(track==link.name))
-                
+                    link.animation_update(
+                        fig, ax, fe=fe, track=(track == link.name))
+
                 nonlocal ground
                 ground.remove()
                 ground = add_ground((ax.get_xlim(), ax.get_ylim()))
         else:
             if self.m.hm.type() == Param:
-                t_arr = np.cumsum(np.array([self.m.hm[fe] for fe in self.m.fe]))
+                t_arr = np.cumsum(
+                    np.array([self.m.hm[fe] for fe in self.m.fe]))
             else:  # the t_arr below is variable step
                 t_arr = np.cumsum(utils.get_vals(self.m.hm)) * self.m.hm0.value
-            
-            def _animate(t: float): # t is a float from 0 to total_time
+
+            def _animate(t: float):  # t is a float from 0 to total_time
                 progress_bar(t/frames[-1])
 
                 for link in self.links:
-                    link.animation_update(fig, ax, t=t, t_arr=t_arr, track=(track==link.name))
-                
+                    link.animation_update(
+                        fig, ax, t=t, t_arr=t_arr, track=(track == link.name))
+
                 nonlocal ground
                 ground.remove()
                 ground = add_ground((ax.get_xlim(), ax.get_ylim()))
-        
+
         # if you get impatient and cancel an animation while it's being made,
         # then try to clone a model, you get an error from matplotlib about
         # certain things not being cloneable. So -> try/catch/finally block
         try:
             if self.m.hm.type() == Param:
-                t_sum = sum(self.m.hm[fe] for fe in self.m.fe if fe != nfe) * self.m.hm0.value
+                t_sum = sum(self.m.hm[fe]
+                            for fe in self.m.fe if fe != nfe) * self.m.hm0.value
             else:
-                t_sum = sum(self.m.hm[fe].value for fe in self.m.fe if fe != nfe) * self.m.hm0.value
-            
-            interval_ms = 1000*t_scale * (t_sum /nfe / ncp if dt is None else dt)
-            frames = [fe for fe in self.m.fe] if dt is None else np.arange(start=0, stop=t_sum+dt, step=dt)
+                t_sum = sum(
+                    self.m.hm[fe].value for fe in self.m.fe if fe != nfe) * self.m.hm0.value
+
+            interval_ms = 1000*t_scale * \
+                (t_sum / nfe / ncp if dt is None else dt)
+            frames = [fe for fe in self.m.fe] if dt is None else np.arange(
+                start=0, stop=t_sum+dt, step=dt)
             anim = matplotlib.animation.FuncAnimation(
                 fig, _animate, frames=frames, interval=interval_ms
             )
@@ -387,16 +390,16 @@ class System3D():
             else:
                 from IPython.core.display import display, HTML
                 display(HTML(anim.to_html5_video()))
-        
+
         except Exception as e:
             progress_bar(nfe, ncp)
-            utils.error(f'Interrupted animation due to error: {e}')
-        
+            visual.error(f'Interrupted animation due to error: {e}')
+
         finally:
             for link in self.links:
                 link.cleanup_animation(fig, ax)
             del fig, ax
-    
+
     def plot(self, plot_links: bool = True) -> None:
         if self.m.hm.type() == Var:
             from matplotlib import pyplot as plt
@@ -415,7 +418,7 @@ class System3D():
         """
         Initialize a model from a solved one, interpolating values if needed
         """
-        # TODO: change this to be more like the dict approach above! Or just use that instead!        
+        # TODO: change this to be more like the dict approach above! Or just use that instead!
         utils.debug('Only use init_from_robot with two robots which are identical, but'
                     ' with possibly differing finite elements and collocation points')
         utils.warn('init_from_robot: haven\'t yet figured out what to do with `None`s at'
@@ -427,7 +430,8 @@ class System3D():
         assert interpolation == 'linear'
 
         import math
-        valid_num = lambda num: not (num is None or math.isnan(num) or math.isinf(num))
+        def valid_num(num): return not (
+            num is None or math.isnan(num) or math.isinf(num))
 
         # TODO: refactor into a different func?
         # def supersample(new_x, old_x, data):
@@ -439,7 +443,7 @@ class System3D():
 
         # get data from source
         hm = utils.get_vals(source.m.hm)
-        
+
         # interpolate
         hm2 = np.interp(
             np.linspace(0, 1, num=len(self.m.fe)),
@@ -454,8 +458,8 @@ class System3D():
             # get data from source. using `astype` to get rid of None's
             srcdata = np.array([
                 var.value for fe in source.m.fe
-                          for cp in source.m.cp
-                          for var in srclink.get_pyomo_vars(fe, cp)
+                for cp in source.m.cp
+                for var in srclink.get_pyomo_vars(fe, cp)
             ]).reshape((len(source.m.fe) * len(source.m.cp), -1)).astype(float)
 
             # x interpolation points (replace with cumsum of hm!)
@@ -463,14 +467,15 @@ class System3D():
             x_dest = np.linspace(0, 1, num=len(self.m.fe) * len(self.m.cp))
 
             destdata = [[destlink.get_pyomo_vars(fe, cp) for cp in self.m.cp]
-                                                         for fe in self.m.fe]
-            
+                        for fe in self.m.fe]
+
             # interpolate
             interpolated_data = np.zeros((x_dest.shape[0], srcdata.shape[1]))
             for varidx in range(srcdata.shape[1]):
-                interped = np.interp(x_dest, x_orig, srcdata[:,varidx])
+                interped = np.interp(x_dest, x_orig, srcdata[:, varidx])
                 # replace the np.nan's with None, for pyomo
-                interpolated_data[:, varidx] = np.where(np.isnan(interped), None, interped)
+                interpolated_data[:, varidx] = np.where(
+                    np.isnan(interped), None, interped)
 
             # add to destination model
             ncp = len(self.m.cp)
@@ -483,13 +488,15 @@ class System3D():
                         skipped_vars.append(var)
                         continue
                     if not valid_num(num):
-                        print('skipping invalid number:', num, 'at index', varidx, 'for variable', var)
+                        print('skipping invalid number:', num,
+                              'at index', varidx, 'for variable', var)
                         continue
 
                     var.value = num
-            
+
             if len(skipped_vars) > 0:
-                utils.debug(f'init_from_robot: skipped variables because they are fixed: {skipped_vars}')
+                utils.debug(
+                    f'init_from_robot: skipped variables because they are fixed: {skipped_vars}')
 
     def feet(self):
         # TODO: if this isn't in fact silly, add things like .upperlegs(), .lowerlegs(), etc
@@ -499,17 +506,18 @@ class System3D():
         child_links = '\n  '.join(str(link) + ',' for link in self.links)
         return f'System3D(name="{self.name}", [\n  {child_links}\n])'
 
-    def post_solve(self, costs: Optional[Dict[str,Any]] = None, detailed: bool = False):
+    def post_solve(self, costs: Optional[Dict[str, Any]] = None, detailed: bool = False):
         from pyomo.environ import value as pyovalue
         print('Total cost:', pyovalue(self.m.cost))
-        
+
         if costs is not None:
             for k, v in costs.items():
                 print(f'-- {k}: {pyovalue(v)}')
-        
-        foot_pen = sum(pyovalue(link.foot.penalty_sum()) for link in self.links if link.has_foot())
+
+        foot_pen = sum(pyovalue(link.foot.penalty_sum())
+                       for link in self.links if link.has_foot())
         if foot_pen > 1e-3:
-            utils.error('Foot penalty seems to be unsolved')
+            visual.error('Foot penalty seems to be unsolved')
 
         if detailed is True:
             from pyomo.util.infeasible import log_infeasible_constraints
@@ -521,7 +529,7 @@ class System3D():
             log_infeasible_bounds(self.m)
 
     # Figure out how to handle constraints etc with this presolve approach. Eg min distance, etc
-    def presolve(self, collocation: str, nfe: int, setup_func: Callable[['System3D'],None], no_C: bool,
+    def presolve(self, collocation: str, nfe: int, setup_func: Callable[['System3D'], None], no_C: bool,
                  make_pyomo_model_kwargs: dict = {}, default_solver_kwargs: dict = {}):
         """
         Create a new (simpler) model, solve it, then copy over the (interpolated) values
@@ -543,14 +551,15 @@ class System3D():
 
         new_sys = copy.deepcopy(self)
         new_sys.make_pyomo_model(nfe=nfe, collocation=collocation, presolve_no_C=no_C,
-                                 total_time=float(self.m.hm0.value * len(self.m.fe)),
-                                  **make_pyomo_model_kwargs)
+                                 total_time=float(
+                                     self.m.hm0.value * len(self.m.fe)),
+                                 **make_pyomo_model_kwargs)
         setup_func(new_sys)
 
         results = utils.default_solver(max_mins=10, solver='ma86',
                                        OF_hessian_approximation='limited-memory',
                                        **default_solver_kwargs).solve(new_sys.m, tee=True)
-        
+
         from pyomo.opt import TerminationCondition
         if results.solver.termination_condition == TerminationCondition.infeasible:
             utils.warn('Presolving returned an infeasible result')

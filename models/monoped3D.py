@@ -19,31 +19,37 @@ from ..system import System3D
 
 # TODO: add meta information?
 
-def monoped3D() -> Tuple[System3D,Callable[[System3D],None]]:
+
+def monoped3D() -> Tuple[System3D, Callable[[System3D], None]]:
     # create links: body, upper leg, lower leg
-    base  = Link3D('base', '+x', base=True, mass=5., radius=0.4, length=0.4)
-    upper = Link3D('upper', '-z', start_I=base.Pb_I, mass=.6, radius=0.01, length=0.25)
-    lower = Link3D('lower', '-z', start_I=upper.bottom_I, mass=.4, radius=0.01, length=0.25)\
+    base = Link3D('base', '+x', base=True, mass=5., radius=0.4, length=0.4)
+    upper = Link3D('upper', '-z', start_I=base.Pb_I,
+                   mass=.6, radius=0.01, length=0.25)
+    lower = Link3D('lower', '-z', start_I=upper.bottom_I,
+                   mass=.4, radius=0.01, length=0.25) \
         .add_foot(at='bottom', nsides=8, friction_coeff=1.)
 
     # add relationships between links
-    base.add_hookes_joint(upper, about='xy')\
-        .add_input_torques_at(upper, about='xy')
+    base.add_hookes_joint(upper, about='xy')
+    base.add_torque_input(bounds=(-2, 2))
+    base.torque.add_input_torques_at(upper, about='xy')
 
-    upper.add_revolute_joint(lower, about='y')\
-        .add_input_torques_at(lower, about='y')
+    upper.add_revolute_joint(lower, about='y')
+    upper.add_torque_input(bounds=(-2, 2))
+    upper.torque.add_input_torques_at(lower, about='y')
 
     # combine into a robot
     robot = System3D('3D monoped', [base, upper, lower])
 
     return robot, add_pyomo_constraints
 
+
 def add_pyomo_constraints(robot: System3D):
     from math import pi as π
     body, thigh, calf = [link['q'] for link in robot.links]
 
     constrain_rel_angle(robot.m, 'hip',
-                        -π/2, body[:,:,'theta'], thigh[:,:,'theta'], π/2)
-    
+                        -π/2, body[:, :, 'theta'], thigh[:, :, 'theta'], π/2)
+
     constrain_rel_angle(robot.m, 'knee',
-                        0, thigh[:,:,'theta'], calf[:,:,'theta'], π)
+                        0, thigh[:, :, 'theta'], calf[:, :, 'theta'], π)
