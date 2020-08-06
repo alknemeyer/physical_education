@@ -1,9 +1,9 @@
 """
     Usage is along the lines of:
     ```
-    >>> from collocation import radau_3
-    >>> m.interp_q  = Constraint(m.fe, m.cp, m.vars, rule=utils.radau_3(m.q,  m.dq))
-    >>> m.interp_dq = Constraint(m.fe, m.cp, m.vars, rule=utils.radau_3(m.dq, m.ddq))
+    >>> from optim_lib.collocation import radau_3
+    >>> m.interp_q  = Constraint(m.fe, m.cp, m.vars, rule=radau_3(m.q,  m.dq))
+    >>> m.interp_dq = Constraint(m.fe, m.cp, m.vars, rule=radau_3(m.dq, m.ddq))
     ```
     Or,
     ```
@@ -14,10 +14,14 @@
     >>> collocation.check_collocation_method('radua_56')  # raises ValueError
     ```
 """
-from pyomo.environ import ConcreteModel, Var, Constraint
+from .argh import ConcreteModel, Var, Constraint
 from typing import Dict, Callable, Tuple
 
-_collocation_mapping: Dict[str, Tuple[Callable, int]] = {}
+# eg: input is a string like 'implicit_euler'
+#     output is a tuple of:
+#         a function which takes two pyomo Var's and returns a function
+#         an integer of the corresponding number of collocation points
+_collocation_mapping: Dict[str, Tuple[Callable[[Var,Var],Callable], int]] = {}
 
 
 def get_ncp(collocation: str):
@@ -33,7 +37,8 @@ def get_collocation_func(collocation: str):
 def check_collocation_method(collocation: str):
     if not collocation in _collocation_mapping.keys():
         raise ValueError(
-            f'Invalid collocation method. Valid options are {_collocation_mapping.keys()}. Got: {collocation}')
+            f'Invalid collocation method. Valid options are {_collocation_mapping.keys()}. Got: {collocation}'
+        )
 
 
 def explicit_euler(q: Var, dq: Var):

@@ -1,11 +1,10 @@
-from typing import Tuple, List, Iterable, TypeVar
-from pyomo.environ import Var, ConcreteModel
+from typing import Tuple, List, Iterable, TYPE_CHECKING
+from .argh import Var, ConcreteModel
+from .utils import flatten
 
-T = TypeVar('T')
 
-
-def flatten(lst: Iterable[Iterable[T]]) -> List[T]:
-    return [item for sublist in lst for item in sublist]
+if TYPE_CHECKING:
+    from .links import Link3D
 
 
 class VariableList:
@@ -15,8 +14,8 @@ class VariableList:
     ```
     with fe = 1..nfe, cp = 1..ncp (ie, one-based)
     """
+    # sources_of_vars is an iterable of Links. Typing is tricky due to circular imports
 
-    # type: ignore
     def __init__(self, m: ConcreteModel, sources_of_vars: Iterable['Link3D']):
         self.sources_of_vars = sources_of_vars
 

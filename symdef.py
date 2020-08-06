@@ -1,5 +1,5 @@
 import sympy as sp
-from sympy import Matrix as Mat
+from .argh import Mat
 from typing import Tuple
 
 USE_LATEX: bool = True
@@ -18,6 +18,7 @@ def make_xyz_syms(i: str) -> Tuple[Mat, Mat, Mat]:
     [\\dot{z}_{test}]])
     ```
     """
+    global USE_LATEX
     if USE_LATEX is True:
         q = sp.symbols(r'x_{%s} y_{%s} z_{%s}' % (i, i, i))
         dq = sp.symbols(r'\dot{x}_{%s} \dot{y}_{%s} \dot{z}_{%s}' % (i, i, i))
@@ -27,6 +28,7 @@ def make_xyz_syms(i: str) -> Tuple[Mat, Mat, Mat]:
         q = sp.symbols(f'  x_{i}   y_{i}   z_{i}')
         dq = sp.symbols(f' dx_{i}  dy_{i}  dz_{i}')
         ddq = sp.symbols(f'ddx_{i} ddy_{i} ddz_{i}')
+
     return Mat(q), Mat(dq), Mat(ddq)
 
 
@@ -43,6 +45,7 @@ def make_ang_syms(i: str) -> Tuple[Mat, Mat, Mat]:
     [  \\dot{\\psi}_{test}]])
     ```
     """
+    global USE_LATEX
     if USE_LATEX is True:
         q = sp.symbols(r'\phi_{%s} \theta_{%s} \psi_{%s}' % (i, i, i))
         dq = sp.symbols(
@@ -53,4 +56,5 @@ def make_ang_syms(i: str) -> Tuple[Mat, Mat, Mat]:
         q = sp.symbols(f'  ϕ_{i}   θ_{i}   ψ_{i}')
         dq = sp.symbols(f' dϕ_{i}  dθ_{i}  dψ_{i}')
         ddq = sp.symbols(f'ddϕ_{i} ddθ_{i} ddψ_{i}')
+
     return Mat(q), Mat(dq), Mat(ddq)

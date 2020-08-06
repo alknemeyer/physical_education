@@ -1,13 +1,17 @@
 import sympy as sp
 import numpy as np
-from sympy import Matrix as Mat
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing_extensions import TypedDict
 from . import utils
-from .variable_list import VariableList
-
-from pyomo.environ import (
-    ConcreteModel, Param, Set, Var, Constraint,
+from .argh import (
+    ConcreteModel, Param, Set, Var, Constraint, Mat
 )
+
+if TYPE_CHECKING:
+    from .variable_list import VariableList
+
+
+PlotConfig = TypedDict('PlotConfig', plot_forces=bool, force_scale=float)
 
 
 def cylinder_in_air(A: float, *, Cd: float = 0.8, rho: float = 10.) -> float:
@@ -32,8 +36,8 @@ def _angle_between(veca: Mat, vecb: Mat, eps: float):
 
 
 class Drag3D:
-    def __init__(self, name: str, r: Mat, area_norm: Mat, coeff: float,
-                 dummy_dr: bool = False, cylinder_top: bool = False):
+    def __init__(self, name: str, r: Mat, area_norm: Mat, coeff: float, *,
+                 use_dummy_vars: bool, cylinder_top: bool = False):
         """
         - name: unique name to identify the drag force
         - r: location where the drag force acts in 3D
@@ -41,8 +45,7 @@ class Drag3D:
         - coeff: all the constant stuff in a drag equation: 1/2 * Cd * rho * A
 
         ```
-        >>> Drag3D('tail', r=[x, y, z], Rb_I=euler321(),
-                   coeff=cylinder_in_air(A))
+        >>> Drag3D('tail', r=[x, y, z], Rb_I=euler321(), coeff=cylinder_in_air(A))
         ```
         """
         self.name = name
@@ -50,22 +53,37 @@ class Drag3D:
         self.Fmag = sp.Symbol('F_{d/%s}' % name)
         self.coeff = coeff
         self.area_norm = area_norm
-        self.dummy_dr = dummy_dr
+        self.use_dummy_vars = use_dummy_vars
         self.cylinder_top = cylinder_top
+        self.deactivated = False
 
-        self._plot_config: Dict[str] = {
-            'plot_forces': True, 'force_scale': 1/10}
+        self._plot_config: PlotConfig = {
+            'plot_forces': True,
+            'force_scale': 1/10,
+        }
 
     def calc_eom(self, q, dq, ddq) -> Mat:
         # angle between area and drag force (a scalar)
         # used to get the effective area
-        self.dr = Mat(self.r.jacobian(q) * dq)
+        dr_eqn = Mat(self.r.jacobian(q) * dq)
+
+        if self.use_dummy_vars:
+            from .symdef import make_xyz_syms
+
+            self.area_norm_eqn = self.area_norm
+            self.area_norm = make_xyz_syms(self.name + '-area-norm')[1]
+
+            self.dr_eqn = dr_eqn
+            self.dr = make_xyz_syms(self.name + '-dr')[1]
+        else:
+            self.dr = dr_eqn
+
         gamma = _angle_between(self.area_norm, self.dr, eps=1e-6)
 
         # magnitude of the drag force (a scalar) which is proportional to the velocity
         dx, dy, dz = self.dr
         if self.cylinder_top:
-            utils.warn('(1 - sp.sin(gamma))**2 has not been tested!')
+            utils.warn('(1 - sp.sin(gamma))**2 has not been tested properly!')
             self.Fmag_rhs = self.coeff * \
                 (1 - sp.sin(gamma))**2 * (dx**2 + dy**2 + dz**2)
         else:
@@ -76,49 +94,64 @@ class Drag3D:
         self.f = - self.Fmag * self.dr / _norm(self.dr, eps=1e-6)
 
         # then, project the force onto the plane defined by the norm of the area
-        n = self.area_norm
-        # this assumes area_norm is a unit vector
-        self.f = self.f - n.dot(self.f) * n
-        # self.f = self.f - n.dot(self.f)/n.dot(n) * n  # this normalizes area_norm
+        # n = self.area_norm
+        # # this assumes area_norm is a unit vector
+        # self.f = self.f - n.dot(self.f) * n
+        # # self.f = self.f - n.dot(self.f)/n.dot(n) * n  # this normalizes area_norm
 
         # input force mapping (a vector)
-        self.Q = sp.Matrix((self.f.T @ self.r.jacobian(q)).T)
+        self.Q = Mat((self.f.T @ self.r.jacobian(q)).T)
 
         return self.Q
 
     def add_vars_to_pyomo_model(self, m: ConcreteModel):
         Fmag = Var(m.fe, m.cp, name='Fmag', bounds=(0, None))
 
+        xyz_set = Set(initialize=['x', 'y', 'z'] if self.use_dummy_vars else [],
+                      name='xyz_set', ordered=True)
+        dr = Var(m.fe, m.cp, xyz_set, name='dr')
+        area_norm = Var(m.fe, m.cp, xyz_set, name='area_norm')
+
         self.pyomo_params: Dict[str, Param] = {}
-        self.pyomo_sets: Dict[str, Set] = {}
+        self.pyomo_sets: Dict[str, Set] = {'xyz_set': xyz_set}
         self.pyomo_vars: Dict[str, Var] = {
-            'Fmag': Fmag
+            'Fmag': Fmag,
+            'dr': dr,
+            'area_norm': area_norm,
         }
 
-        for v in self.pyomo_vars.values():
-            newname = f'{self.name}_{v}'
-            assert not hasattr(
-                m, newname), f'The pyomo model already has a variable with the name "{newname}"'
-            setattr(m, newname, v)
+        utils.add_to_pyomo_model(m, self.name, [
+            self.pyomo_params.values(),
+            self.pyomo_sets.values(),
+            self.pyomo_vars.values(),
+        ])
 
     def get_pyomo_vars(self, fe: int, cp: int):
         """fe, cp are one-based!"""
         # NB: keep in sync with get_sympy_vars()!!
         v = self.pyomo_vars
-        return [v['Fmag'][fe, cp]]  # , v['dr'][fe,cp,:]]
+        return [v['Fmag'][fe, cp], *v['dr'][fe, cp, :], *v['area_norm'][fe, cp, :]]
 
     def get_sympy_vars(self):
         # NB: keep in sync with get_pyomo_vars()!!
-        return [self.Fmag]  # , *self.dr]
+        return [self.Fmag] + ([*self.dr, *self.area_norm] if self.use_dummy_vars else [])
 
     def save_data_to_dict(self) -> Dict[str, Any]:
+        m = self.pyomo_vars['Fmag'].model()
+        xyz_set = self.pyomo_sets['xyz_set']
         return {
             'name': self.name,
-            'Fmag': utils.get_vals(self.pyomo_vars['Fmag']),
+            'Fmag': utils.get_vals(self.pyomo_vars['Fmag'], (m.cp,)),
+            'dr': utils.get_vals(self.pyomo_vars['dr'], (xyz_set,)),
+            'area_norm': utils.get_vals(self.pyomo_vars['area_norm'], (xyz_set,)),
             'coeff': self.coeff,
         }
 
-    def init_from_dict_one_point(self, data: Dict[str, Any], fed: int, cpd: int, fes: Optional[int] = None, cps: Optional[int] = None, **kwargs) -> None:
+    def init_from_dict_one_point(self, data: Dict[str, Any],
+                                 fed: int, cpd: int,
+                                 fes: Optional[int] = None, cps: Optional[int] = None,
+                                 **kwargs
+                                 ) -> None:
         if fes is None:
             fes = fed - 1
         if cps is None:
@@ -134,14 +167,26 @@ class Drag3D:
         utils.maybe_set_var(v['Fmag'][fed, cpd],
                             data['Fmag'][fes, cps], **kwargs)
 
+        for axi, ax in enumerate(self.pyomo_sets['xyz_set']):
+            utils.maybe_set_var(v['dr'][fed, cpd, ax],
+                                data['dr'][fes, cps, axi], **kwargs)
+            utils.maybe_set_var(v['area_norm'][fed, cpd, ax],
+                                data['area_norm'][fes, cps, axi], **kwargs)
+
     def add_equations_to_pyomo_model(self,
                                      sp_variables: List[sp.Symbol],
-                                     pyo_variables: VariableList,
-                                     collocation: str):
+                                     pyo_variables: 'VariableList',
+                                     collocation: str):        
         Fmag = self.pyomo_vars['Fmag']
         m = Fmag.model()
 
-        from pyomo.environ import atan
+        if self.deactivated:
+            for fe in m.fe:
+                for cp in m.cp:
+                    Fmag[fe, cp].fix(0)
+            return
+
+        from .argh import atan
         func_map = {
             'sqrt': lambda x: (x + 1e-6)**(1/2),
             'atan': atan,
@@ -159,6 +204,36 @@ class Drag3D:
 
         setattr(m, self.name + '_Fmag_constr',
                 Constraint(m.fe, m.cp, rule=def_Fmag))
+
+        if self.use_dummy_vars:
+            xyz_set = self.pyomo_sets['xyz_set']
+            dr = self.pyomo_vars['dr']
+            dr_rhs_funcs = utils.lambdify_EOM(
+                self.dr_eqn, sp_variables, func_map=func_map
+            )
+
+            def def_dr_dummy(m, fe, cp, ax):
+                if fe == 1 and cp < ncp:
+                    return Constraint.Skip
+                else:
+                    return dr[fe, cp, ax] == dr_rhs_funcs['xyz'.index(ax)](*pyo_variables[fe, cp])
+
+            setattr(m, self.name + '_dr_dummy',
+                    Constraint(m.fe, m.cp, xyz_set, rule=def_dr_dummy))
+
+            area_norm = self.pyomo_vars['area_norm']
+            area_norm_rhs_funcs = utils.lambdify_EOM(
+                self.area_norm_eqn, sp_variables, func_map=func_map
+            )
+
+            def def_area_norm_dummy(m, fe, cp, ax):
+                if fe == 1 and cp < ncp:
+                    return Constraint.Skip
+                else:
+                    return area_norm[fe, cp, ax] == area_norm_rhs_funcs['xyz'.index(ax)](*pyo_variables[fe, cp])
+
+            setattr(m, self.name + '_area_norm_dummy',
+                    Constraint(m.fe, m.cp, xyz_set, rule=def_area_norm_dummy))
 
         # for animating
         self.r_func = utils.lambdify_EOM(
@@ -180,6 +255,9 @@ class Drag3D:
         return self
 
     def animation_setup(self, fig, ax, data: List[List[float]]):
+        if self.deactivated:
+            return
+        
         if self._plot_config['plot_forces'] is False:
             return
 
@@ -197,6 +275,9 @@ class Drag3D:
                          t: Optional[float] = None,
                          t_arr: Optional[np.ndarray] = None,
                          track: bool = False):
+        if self.deactivated:
+            return
+
         if self._plot_config['plot_forces'] is False:
             return
 
@@ -220,6 +301,9 @@ class Drag3D:
         self.has_line = True
 
     def cleanup_animation(self, fig, ax):
+        if self.deactivated:
+            return
+        
         try:
             del self.line
         except:
@@ -229,4 +313,24 @@ class Drag3D:
         utils.warn('Drag3D.plot() not implemented!', once=True)
 
     def __repr__(self) -> str:
-        return f'Drag3D(name="{self.name}", coeff={self.coeff})'
+        return f'Drag3D(name="{self.name}", coeff={self.coeff}, active={not self.deactivated})'
+
+
+def add_drag(link, at: Mat, name: Optional[str] = None, **kwargs):
+    if name is None:
+        name = link.name + '_drag'
+
+    assert name not in link.nodes,\
+        f'This link already has a node with the name {name}'
+
+    v = sp.zeros(3, 1)
+    v['xyz'.index(link.aligned_along[1])] = 1
+    A = link.length * (2 * link.radius)
+
+    drag = Drag3D(str(name),
+                  r=at,
+                  area_norm=link.Rb_I * v,
+                  coeff=cylinder_in_air(A),
+                  **kwargs)
+    link.nodes[name] = drag
+    return drag

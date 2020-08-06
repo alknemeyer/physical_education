@@ -1,27 +1,18 @@
 # https://stackoverflow.com/questions/15853469/putting-current-class-as-return-type-annotation
 # can't use this while supporting python 3.6 (PyPy 7.3), have to use strings for now
 # from __future__ import annotations
-from typing import Any, Dict, Iterable, Optional, List, Tuple, TypeVar
+from typing import Any, Dict, Iterable, Optional, List, cast
+from typing_extensions import TypedDict
 import sympy as sp
 import numpy as np
-import itertools
-from sympy import Matrix as Mat
-from pyomo.environ import (
-    ConcreteModel, Set, Var, Constraint, Param
+from .argh import (
+    ConcreteModel, Set, Var, Constraint, Param, Mat
 )
-from . import utils, symdef, foot, drag, motor, visual
+from . import utils, symdef, visual
+from .template import Node
 from .variable_list import VariableList
 
-# TODO: replace '.foot' and '.drag' with '.subnodes
-
-T = TypeVar('T')
-
-
-def flatten(ls: Iterable[Iterable[T]]) -> List[T]:
-    """
-    Flatten an iterable of iterables of items into a list of items
-    """
-    return [item for sublist in ls for item in sublist]
+PlotConfig = TypedDict('PlotConfig', shape=str, linewidth=float, color=str)
 
 
 class Link3D:
@@ -49,8 +40,10 @@ class Link3D:
         #     'Only one of top_I, bottom_I or base can be specified'
         assert (start_I is not None) ^ (base is True), \
             'A link must either be given an offset, or be a base link'
-        assert aligned_along in ('+x', '+y', '+z', '-x', '-y', '-z'),\
-            'Align the link along the x, y or z axes'
+
+        acceptable_args = ('+x', '+y', '+z', '-x', '-y', '-z')
+        assert aligned_along in acceptable_args,\
+            f'Align the link along the x, y or z axes. Got {aligned_along}, must be one of {acceptable_args}'
 
         self.mass_sym = sp.Symbol('m_{%s}' % name)
         self.length_sym = sp.Symbol('L_{%s}' % name)
@@ -92,9 +85,11 @@ class Link3D:
 
         # positions in body and inertial axes
         if self.is_base:
+            assert xyz is not None  # a type hint for mypy
             self.Pb_I = xyz
             self.top_I = self.Pb_I + self.Rb_I @ offset_b
         else:
+            assert start_I is not None  # a type hint for mypy
             self.top_I = start_I
             self.Pb_I = self.top_I - self.Rb_I @ offset_b
 
@@ -103,12 +98,20 @@ class Link3D:
         # defining other things for later use
         self.constraint_forces: List = []
         self.angle_constraints: List = []
-        self._plot_config: Dict[str] = {'shape': 'line',
-                                        'linewidth': 2,
-                                        'color': 'tab:orange'}
+        self._plot_config: PlotConfig = {
+            'shape': 'line',
+            'linewidth': 2.,
+            'color': 'tab:orange',
+        }
 
         self.aligned_along = aligned_along
-        self.meta: Set[str] = set(meta)
+
+        from typing import Set as _Set
+        from . import meta as _meta
+        self.meta: _Set[str] = set(meta)
+        assert _meta.is_valid(self.meta)
+
+        self.nodes: Dict[str, Node] = {}
 
     def calc_eom(self, q, dq, ddq) -> Mat:
         if len(self.angle_constraints) > 0:
@@ -118,14 +121,8 @@ class Link3D:
         else:
             Q = sp.zeros(len(q), 1)
 
-        if self.has_torque_input():
-            Q += self.torque.calc_eom(q, dq, ddq)
-
-        if self.has_foot():
-            Q += self.foot.calc_eom(q, dq, ddq)
-
-        if self.has_drag():
-            Q += self.drag.calc_eom(q, dq, ddq)
+        for node in self.nodes.values():
+            Q += node.calc_eom(q, dq, ddq)
 
         return Q
 
@@ -166,48 +163,6 @@ class Link3D:
 
         return self
 
-    def add_torque_input(self, **kwargs) -> 'Link3D':
-        assert not hasattr(self, 'torque'), \
-            'For now, a link can have only one motor model input'
-        self.torque = motor.Motor3D(self.name+'_motor', self.Rb_I, **kwargs)
-        return self
-
-    def has_torque_input(self) -> bool:
-        return hasattr(self, 'torque')
-
-    def add_foot(self, at: str, **kwargs) -> 'Link3D':
-        """
-        `at` is usually `self.bottom_I`. Eg:
-        >>> link.add_foot(at='bottom')
-        """
-        assert at in ('top', 'bottom'), \
-            "Can only add ground contacts at top or bottom of foot"
-        assert not hasattr(self, 'foot'), \
-            "For now, a link can only have one ground contact point"
-
-        Pb_I = self.bottom_I if at == 'bottom' else self.top_I
-        self.foot = foot.Foot3D(self.name + '_foot', Pb_I, **kwargs)
-        return self
-
-    def has_foot(self) -> bool:
-        return hasattr(self, 'foot')
-
-    def add_drag(self, at: str) -> 'Link3D':
-        assert not hasattr(self, 'drag'), \
-            "For now, a link can only have one drag force"
-
-        v = sp.zeros(3, 1)
-        v['xyz'.index(self.aligned_along[1])] = 1
-        A = self.length * (2 * self.radius)
-        self.drag = drag.Drag3D(self.name + '_drag',
-                                r=at,
-                                area_norm=self.Rb_I * v,
-                                coeff=drag.cylinder_in_air(A))
-        return self
-
-    def has_drag(self) -> bool:
-        return hasattr(self, 'drag')
-
     def add_vars_to_pyomo_model(self, m: ConcreteModel) -> None:
         for attr in ('mass', 'length', 'radius'):
             assert isinstance(getattr(self, attr), float),\
@@ -245,27 +200,19 @@ class Link3D:
             'q': q, 'dq': dq, 'ddq': ddq, 'Fr': Fr,
         }
 
-        for v in itertools.chain(self.pyomo_params.values(),
-                                 self.pyomo_sets.values(),
-                                 self.pyomo_vars.values()):
-            newname = f'{self.name}_{v}'
-            assert not hasattr(
-                m, newname), f'The pyomo model already has a variable with the name "{newname}"'
-            setattr(m, newname, v)
+        utils.add_to_pyomo_model(m, self.name, [
+            self.pyomo_params.values(),
+            self.pyomo_sets.values(),
+            self.pyomo_vars.values(),
+        ])
 
         if self.is_base:
             for fe in m.fe:
                 for cp in m.cp:
                     q[fe, cp, 'z'].setlb(0)
 
-        if self.has_torque_input():
-            self.torque.add_vars_to_pyomo_model(m)
-
-        if self.has_foot():
-            self.foot.add_vars_to_pyomo_model(m)
-
-        if self.has_drag():
-            self.drag.add_vars_to_pyomo_model(m)
+        for node in self.nodes.values():
+            node.add_vars_to_pyomo_model(m)
 
     def add_equations_to_pyomo_model(self,
                                      sp_variables: List[sp.Symbol],
@@ -291,25 +238,17 @@ class Link3D:
         self.top_I_func = utils.lambdify_EOM(self.top_I, sp_variables)
         self.bottom_I_func = utils.lambdify_EOM(self.bottom_I, sp_variables)
 
-        if self.has_torque_input():
-            self.torque.add_equations_to_pyomo_model(
-                sp_variables, pyo_variables, collocation)
-
-        if self.has_foot():
-            self.foot.add_equations_to_pyomo_model(
-                sp_variables, pyo_variables, collocation)
-
-        if self.has_drag():
-            self.drag.add_equations_to_pyomo_model(
-                sp_variables, pyo_variables, collocation)
+        for node in self.nodes.values():
+            node.add_equations_to_pyomo_model(
+                sp_variables, pyo_variables, collocation
+            )
 
     def get_pyomo_vars(self, fe: int, cp: int) -> List:
         """fe, cp are one-based!"""
         # NB: keep in sync with get_sympy_vars()!!
-        torque_vars = self.torque.get_pyomo_vars(
-            fe, cp) if self.has_torque_input() else []
-        foot_vars = self.foot.get_pyomo_vars(fe, cp) if self.has_foot() else []
-        drag_vars = self.drag.get_pyomo_vars(fe, cp) if self.has_drag() else []
+        node_vars = []
+        for node in self.nodes.values():
+            node_vars.extend(node.get_pyomo_vars(fe, cp))
 
         v = self.pyomo_vars
         p = self.pyomo_params
@@ -319,25 +258,22 @@ class Link3D:
             *v['ddq'][fe, cp, :],
             *v['Fr'][fe, cp, :],
             p['mass'], p['length'], p['radius'],
-            *torque_vars,
-            *foot_vars,
-            *drag_vars,
+            *node_vars,
         ]
 
     def get_sympy_vars(self) -> List[sp.Symbol]:
         # NB: keep in sync with get_pyomo_vars()!!
-        torque_vars = self.torque.get_sympy_vars() if self.has_torque_input() else []
-        foot_vars = self.foot.get_sympy_vars() if self.has_foot() else []
-        drag_vars = self.drag.get_sympy_vars() if self.has_drag() else []
+        node_vars = []
+        for node in self.nodes.values():
+            node_vars.extend(node.get_sympy_vars())
+
         return [
             *self.q,
             *self.dq,
             *self.ddq,
             *self.constraint_forces,
             self.mass_sym, self.length_sym, self.radius_sym,
-            *torque_vars,
-            *foot_vars,
-            *drag_vars,
+            *node_vars,
         ]
 
     def __getitem__(self, varname: str) -> Var:
@@ -359,15 +295,14 @@ class Link3D:
             'dq': utils.get_vals(self.pyomo_vars['dq'], (q_set,)),
             'ddq': utils.get_vals(self.pyomo_vars['ddq'], (q_set,)),
             'Fr': utils.get_vals(self.pyomo_vars['Fr'], (Fr_set,)) if len(Fr_set) > 0 else [],
-            'has_torque': self.has_torque_input(),
-            'has_foot': self.has_foot(),
-            'has_drag': self.has_drag(),
-            'torque': self.torque.save_data_to_dict() if self.has_torque_input() else None,
-            'foot': self.foot.save_data_to_dict() if self.has_foot() else None,
-            'drag': self.drag.save_data_to_dict() if self.has_drag() else None,
+            'nodes': [node.save_data_to_dict() for node in self.nodes.values()],
         }
 
-    def init_from_dict_one_point(self, data: Dict[str, Any], fed: int, cpd: int, fes: Optional[int] = None, cps: Optional[int] = None, **kwargs) -> None:
+    def init_from_dict_one_point(self, data: Dict[str, Any],
+                                 fed: int, cpd: int,
+                                 fes: Optional[int] = None, cps: Optional[int] = None,
+                                 **kwargs
+                                 ) -> None:
         if fes is None:
             fes = fed - 1
         if cps is None:
@@ -389,17 +324,9 @@ class Link3D:
                 utils.maybe_set_var(
                     self.pyomo_vars['Fr'][fed, cpd, F], data['Fr'][fes, cps, idx], **kwargs)
 
-        if self.has_torque_input():
-            self.torque.init_from_dict_one_point(
-                data['torque'], fed, cpd, fes, cps, **kwargs)
-
-        if self.has_foot():
-            self.foot.init_from_dict_one_point(
-                data['foot'], fed, cpd, fes, cps, **kwargs)
-
-        if self.has_drag():
-            self.drag.init_from_dict_one_point(
-                data['drag'], fed, cpd, fes, cps, **kwargs)
+        for node, nodedata in zip(self.nodes.values(), data['nodes']):
+            node.init_from_dict_one_point(
+                nodedata, fed, cpd, fes, cps, **kwargs)
 
     # Optional[Union[Literal['line'],Literal['box']]]
     def plot_config(self, *, color: Optional[str] = None,
@@ -432,14 +359,8 @@ class Link3D:
             self.plot_data[0][idx, :] = [f(*d) for f in self.top_I_func]
             self.plot_data[1][idx, :] = [f(*d) for f in self.bottom_I_func]
 
-        if self.has_torque_input():
-            self.torque.animation_setup(fig, ax, data)
-
-        if self.has_foot():
-            self.foot.animation_setup(fig, ax, data)
-
-        if self.has_drag():
-            self.drag.animation_setup(fig, ax, data)
+        for node in self.nodes.values():
+            node.animation_setup(fig, ax, data)
 
     def animation_update(self, fig, ax, fe: Optional[int] = None,
                          t: Optional[float] = None, t_arr: Optional[np.ndarray] = None,
@@ -458,17 +379,11 @@ class Link3D:
         if track is True:
             lim = 1.0
             if top_xyz[2] < lim:
-                top_xyz = [top_xyz[0], top_xyz[1], lim]
+                top_xyz = (float(top_xyz[0]), float(top_xyz[1]), lim)
             visual.track_pt(ax, top_xyz, lim=lim)  # type: ignore
 
-        if self.has_torque_input():
-            self.torque.animation_update(fig, ax, fe=fe, t=t, t_arr=t_arr)
-
-        if self.has_foot():
-            self.foot.animation_update(fig, ax, fe=fe, t=t, t_arr=t_arr)
-
-        if self.has_drag():
-            self.drag.animation_update(fig, ax, fe=fe, t=t, t_arr=t_arr)
+        for node in self.nodes.values():
+            node.animation_update(fig, ax, fe=fe, t=t, t_arr=t_arr)
 
     def cleanup_animation(self, fig, ax):
         try:
@@ -476,14 +391,8 @@ class Link3D:
         except:
             pass
         finally:
-            if self.has_torque_input():
-                self.torque.cleanup_animation(fig, ax)
-
-            if self.has_foot():
-                self.foot.cleanup_animation(fig, ax)
-
-            if self.has_drag():
-                self.drag.cleanup_animation(fig, ax)
+            for node in self.nodes.values():
+                node.cleanup_animation(fig, ax)
 
     def plot(self) -> None:
         m = self.pyomo_vars['q'].model()
@@ -500,6 +409,8 @@ class Link3D:
             # https://stackoverflow.com/a/45925049
             # or this: https://matplotlib.org/gallery/api/two_scales.html
             if self.is_base:  # plot x,y,z separately to angles
+                # typing this as 'Any' because the method accesses following give
+                # false warnings otherwise...
                 fig, ax1 = plt.subplots()
                 ax1.plot(var[:, :3])
                 ax1.legend(list(q_set)[:3])
@@ -546,67 +457,59 @@ class Link3D:
         except StopIteration:
             pass
 
-        if self.has_torque_input():
-            self.torque.plot()
-
-        if self.has_foot():
-            self.foot.plot()
-
-        if self.has_drag():
-            self.drag.plot()
+        for node in self.nodes.values():
+            node.plot()
 
     def __repr__(self) -> str:
-        torque = f',\n    torque={self.torque}' if self.has_torque_input(
-        ) else ''
-        foot = f',\n    foot={self.foot}' if self.has_foot() else ''
-        drag = f',\n    drag={self.drag}' if self.has_drag() else ''
-        return f'Link3D(name="{self.name}", isbase={self.is_base}, mass={self.mass}, length={self.length}, radius={self.radius}{torque}{foot}{drag})'
+        nodes = ',\n    '.join(str(node) for node in self.nodes.values())
+        nodes = f', nodes=[\n    {nodes}]' if len(nodes) > 0 else ''
+        return f'Link3D(name="{self.name}", isbase={self.is_base}, mass={self.mass}kg, length={self.length}m, radius={self.radius}m{nodes})'
 
 
-class PrismaticLink3D(Link3D):
-    def __init__(self, name: str, aligned_along: str, *, bounds: Tuple[float, float], **kwargs):
-        utils.warn(
-            'Prismatic hasnt been tested yet! Remove this message if all seems okay!')
+# class PrismaticLink3D(Link3D):
+#     def __init__(self, name: str, aligned_along: str, *, bounds: Tuple[float, float], **kwargs):
+#         utils.warn(
+#             'Prismatic hasnt been tested yet! Remove this message if all seems okay!')
 
-        assert 'length' in kwargs.keys()
+#         assert 'length' in kwargs.keys()
 
-        self.bounds = bounds
-        self.Δlength = sp.Symbol(f'\\Delta\\ L_{name}')
-        self.dΔlength = sp.Symbol(r'\dot{\Delta\ L_{%s}}' % name)
-        self.ddΔlength = sp.Symbol(r'\ddot{\Delta\\ L_{%s}}' % name)
-        length = self.Δlength + kwargs.pop('length')
-        Link3D.__init__(self, name, aligned_along, **kwargs, length=length)
+#         self.bounds = bounds
+#         self.Δlength = sp.Symbol(f'\\Delta\\ L_{name}')
+#         self.dΔlength = sp.Symbol(r'\dot{\Delta\ L_{%s}}' % name)
+#         self.ddΔlength = sp.Symbol(r'\ddot{\Delta\\ L_{%s}}' % name)
+#         length = self.Δlength + kwargs.pop('length')
+#         Link3D.__init__(self, name, aligned_along, **kwargs, length=length)
 
-        self.q = sp.Matrix([*self.q,   self.Δlength])  # type: ignore
-        self.dq = sp.Matrix([*self.dq,  self.dΔlength])  # type: ignore
-        self.ddq = sp.Matrix([*self.ddq, self.ddΔlength])  # type: ignore
+#         self.q = sp.Matrix([*self.q,   self.Δlength])
+#         self.dq = sp.Matrix([*self.dq,  self.dΔlength])
+#         self.ddq = sp.Matrix([*self.ddq, self.ddΔlength])
 
-    def add_vars_to_pyomo_model(self, m: ConcreteModel) -> None:
-        # NOTE: copied from Link3D above, but with the addition of 'ΔL' in q_set. No other differences
-        raise NotImplementedError('Update this to keep in sync with Link3D!!')
+#     def add_vars_to_pyomo_model(self, m: ConcreteModel) -> None:
+#         # NOTE: copied from Link3D above, but with the addition of 'ΔL' in q_set. No other differences
+#         raise NotImplementedError('Update this to keep in sync with Link3D!!')
 
-        if self.is_base:
-            q_set = Set(initialize=('x', 'y', 'z', 'phi', 'theta',
-                                    'psi', 'ΔL'), name='q_set', ordered=True)
-        else:
-            q_set = Set(initialize=('phi', 'theta', 'psi', 'ΔL'),
-                        name='q_set', ordered=True)
+#         if self.is_base:
+#             q_set = Set(initialize=('x', 'y', 'z', 'phi', 'theta',
+#                                     'psi', 'ΔL'), name='q_set', ordered=True)
+#         else:
+#             q_set = Set(initialize=('phi', 'theta', 'psi', 'ΔL'),
+#                         name='q_set', ordered=True)
 
-        for fe in m.fe:
-            for cp in m.cp:
-                q[fe, cp, 'ΔL'].setlb(self.bounds[0])
-                q[fe, cp, 'ΔL'].setub(self.bounds[1])
-                if self.is_base:
-                    q[fe, cp, 'z'].setlb(0)
+#         for fe in m.fe:
+#             for cp in m.cp:
+#                 q[fe, cp, 'ΔL'].setlb(self.bounds[0])
+#                 q[fe, cp, 'ΔL'].setub(self.bounds[1])
+#                 if self.is_base:
+#                     q[fe, cp, 'z'].setlb(0)
 
-    # def get_pyomo_vars(self, fe: int, cp: int) -> List:
-        # return Link3D.get_pyomo_vars(self, fe, cp) + [self.pyomo_vars['ΔL'][fe,cp]]
+#     # def get_pyomo_vars(self, fe: int, cp: int) -> List:
+#         # return Link3D.get_pyomo_vars(self, fe, cp) + [self.pyomo_vars['ΔL'][fe,cp]]
 
-    # def get_sympy_vars(self) -> List[sp.Symbol]:
-    #     return Link3D.get_sympy_vars(self) + [self.Δlength, self.dΔlength, self.ddΔlength]
+#     # def get_sympy_vars(self) -> List[sp.Symbol]:
+#     #     return Link3D.get_sympy_vars(self) + [self.Δlength, self.dΔlength, self.ddΔlength]
 
-    def __repr__(self) -> str:
-        return 'Prismatic' + Link3D.__repr__(self)
+#     def __repr__(self) -> str:
+#         return 'Prismatic' + Link3D.__repr__(self)
 
 
 def constrain_rel_angle(m: ConcreteModel, constr_name: str,

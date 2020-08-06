@@ -1,16 +1,16 @@
 # from __future__ import annotations
-from typing import Any, Callable, Dict, Iterable, List, Optional, TypeVar, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, TypeVar, Tuple, Union, TYPE_CHECKING
 import sympy as sp
 import numpy as np
-from sympy import Matrix as Mat
-
-from pyomo.environ import (
-    ConcreteModel, RangeSet, Param, Var, Constraint, ConstraintList
+from .argh import (
+    ConcreteModel, RangeSet, Param, Var, Constraint, ConstraintList, Mat
 )
-
 from . import utils, variable_list, visual
-from .links import Link3D
 from . import collocation as _collocation
+from .utils import flatten
+
+if TYPE_CHECKING:
+    from .links import Link3D
 
 T = TypeVar('T')
 
@@ -23,20 +23,14 @@ def getattrs(items: Iterable, attr: str) -> List:
     return [getattr(item, attr) for item in items]
 
 
-def flatten(ls: Iterable[Iterable[T]]) -> List[T]:
-    """
-    Flatten an iterable of iterables of items into a list of items
-    """
-    return [item for sublist in ls for item in sublist]
-
-
 class System3D:
-    def __init__(self, name: str, links: List[Link3D]) -> None:
+    # m: Union[ConcreteModel, None] = None
+    def __init__(self, name: str, links: List['Link3D']) -> None:
         self.name = name
         self.links = links
         self.m: Union[ConcreteModel, None] = None
 
-    def add_link(self, link: Link3D) -> None:
+    def add_link(self, link: 'Link3D') -> None:
         self.links.append(link)
 
     def get_state_vars(self) -> Tuple[Mat, Mat, Mat]:
@@ -69,27 +63,29 @@ class System3D:
         Fr = Mat(flatten(link.constraint_forces for link in self.links))
 
         # foot stuff
-        feet = [link.foot for link in self.links if link.has_foot()]
+        from . import foot
+        feet = foot.feet(self)
 
         Q = sp.zeros(*q.shape)
         for link in self.links:
             Q += link.calc_eom(q, dq, ddq)
-        
+
         B = simp_func(Q)
 
-        eom: Mat = simp_func(M @ ddq + C + G - B)
-        eom_c: Mat = simp_func(M @ ddq + G - B)
-
+        from . import motor
         self.force_scale = sp.Symbol('F_{scale}')
-        to_sub = {force: force*self.force_scale for force in [
-            *flatten(link.torque.input_torques for link in self.links if link.has_torque_input()),
+        to_sub = {force: force*self.force_scale for force in [  # TODO: this should be done by the links themselves!
+            *flatten(torque.input_torques for torque in motor.torques(self)),
             *Fr,
             *flatten(foot.Lx for foot in feet),
             *[foot.Lz for foot in feet],
         ]}
 
-        eom = sp.Matrix([*eom, *angle_constraints]).xreplace(to_sub)
-        eom_c = sp.Matrix([*eom_c, *angle_constraints]).xreplace(to_sub)
+        eom = M @ ddq + C + G - B
+        eom = simp_func(Mat([*eom, *angle_constraints]).xreplace(to_sub))
+
+        # eom_c = M @ ddq + G - B
+        # eom_c = simp_func(Mat([*eom_c, *angle_constraints]).xreplace(to_sub))
 
         self.sp_variables: List[sp.Symbol] = flatten(
             link.get_sympy_vars() for link in self.links
@@ -98,16 +94,19 @@ class System3D:
         utils.info(f'Number of operations in EOM is {sp.count_ops(eom)}')
 
         # TODO: the lambdifying step actually takes quite long -- any way to speed it up?
-        from pyomo.environ import atan
+        from .argh import atan
         func_map = {
             'sqrt': lambda x: (x+1e-9)**(1/2),
             'atan': atan,
             'atan2': lambda y, x: 2 * atan(y/((x**2 + y**2 + 1e-9)**(1/2) + x))
         }
         self.eom_f = utils.lambdify_EOM(
-            eom, self.sp_variables + [self.force_scale], func_map=func_map)
-        self.eom_no_c_f = utils.lambdify_EOM(
-            eom_c, self.sp_variables + [self.force_scale], func_map=func_map)
+            eom,
+            self.sp_variables + [self.force_scale],
+            func_map=func_map
+        )
+        # self.eom_no_c_f = utils.lambdify_EOM(
+        #     eom_c, self.sp_variables + [self.force_scale], func_map=func_map)
 
     def make_pyomo_model(self, nfe: int, collocation: str, total_time: float,
                          scale_forces_by: float,
@@ -219,10 +218,10 @@ class System3D:
 
         self.init_from_dict(data, **kwargs)
 
-    def indices(self, one_based: bool) -> List[Tuple[int, int]]:
-        return utils.get_indexes_(self.m, one_based=one_based)
+    def indices(self, *, one_based: bool, skipfirst: bool = True) -> List[Tuple[int, int]]:
+        return utils.get_indexes(len(self.m.fe), len(self.m.cp), one_based=one_based, skipfirst=skipfirst)
 
-    def __getitem__(self, linkname: str) -> Link3D:
+    def __getitem__(self, linkname: str) -> 'Link3D':
         for link in self.links:
             if link.name == linkname:
                 return link
@@ -240,9 +239,10 @@ class System3D:
         # need to import this to get 3D plots working, for some reason
         from mpl_toolkits import mplot3d
 
+        # typing this as 'Any' because the method accesses following give
+        # false warnings otherwise...
         fig, ax, add_ground = visual.plot3d_setup(
             scale_plot_size=False, **plot3d_config)
-
         if lims is not None:
             x, y, z = lims
             ax.set_xlim(*x)
@@ -256,7 +256,7 @@ class System3D:
         cp = ncp
         data: List[List[float]] = [
             [v.value for v in self.pyo_variables[fe, cp]]
-            for fe in self.m.fe  # type: ignore
+            for fe in self.m.fe
         ]
 
         try:
@@ -299,11 +299,14 @@ class System3D:
         import matplotlib.animation
         from matplotlib import pyplot as plt
 
+        # typing this as 'Any' because the method accesses following give
+        # false warnings otherwise...
         fig, ax, add_ground = visual.plot3d_setup(
             scale_plot_size=False, **plot3d_config)
 
         if lims is not None:
             x, y, z = lims
+            ax: Any
             ax.set_xlim(*x)
             ax.set_ylim(*y)
             ax.set_zlim(*z)
@@ -317,7 +320,7 @@ class System3D:
         cp = ncp
         data: List[List[float]] = [
             [v.value for v in self.pyo_variables[fe, cp]]
-            for fe in self.m.fe  # type: ignore
+            for fe in self.m.fe
         ]
 
         for link in self.links:
@@ -431,7 +434,8 @@ class System3D:
 
         import math
         def valid_num(num): return not (
-            num is None or math.isnan(num) or math.isinf(num))
+            num is None or math.isnan(num) or math.isinf(num)
+        )
 
         # TODO: refactor into a different func?
         # def supersample(new_x, old_x, data):
@@ -470,17 +474,18 @@ class System3D:
                         for fe in self.m.fe]
 
             # interpolate
-            interpolated_data = np.zeros((x_dest.shape[0], srcdata.shape[1]))
+            interpolated_data = np.zeros(
+                (x_dest.shape[0], srcdata.shape[1]))  # type: ignore
             for varidx in range(srcdata.shape[1]):
                 interped = np.interp(x_dest, x_orig, srcdata[:, varidx])
                 # replace the np.nan's with None, for pyomo
                 interpolated_data[:, varidx] = np.where(
-                    np.isnan(interped), None, interped)
+                    np.isnan(interped), None, interped)  # type: ignore
 
             # add to destination model
             ncp = len(self.m.cp)
             skipped_vars = []
-            for fe, cp in utils.get_indexes_(self.m, one_based=False):
+            for fe, cp in self.indices(one_based=False):
                 for varidx, var in enumerate(destdata[fe][cp]):
                     num = interpolated_data[fe*ncp + cp, varidx]
 
@@ -495,38 +500,34 @@ class System3D:
                     var.value = num
 
             if len(skipped_vars) > 0:
-                utils.debug(
-                    f'init_from_robot: skipped variables because they are fixed: {skipped_vars}')
-
-    def feet(self):
-        # TODO: if this isn't in fact silly, add things like .upperlegs(), .lowerlegs(), etc
-        return [link.foot for link in self.links if link.has_foot()]
+                from textwrap import shorten
+                utils.debug(shorten(f'skipped variables because they are fixed: {skipped_vars}', width=100))
 
     def __repr__(self) -> str:
         child_links = '\n  '.join(str(link) + ',' for link in self.links)
         return f'System3D(name="{self.name}", [\n  {child_links}\n])'
 
-    def post_solve(self, costs: Optional[Dict[str, Any]] = None, detailed: bool = False):
-        from pyomo.environ import value as pyovalue
+    def post_solve(self, costs: Optional[Dict[str, Any]] = None, detailed: bool = False, tol: float = 1e-6):
+        from .foot import feet_penalty
+        from .argh import value as pyovalue
         print('Total cost:', pyovalue(self.m.cost))
 
         if costs is not None:
             for k, v in costs.items():
                 print(f'-- {k}: {pyovalue(v)}')
 
-        foot_pen = sum(pyovalue(link.foot.penalty_sum())
-                       for link in self.links if link.has_foot())
+        foot_pen = pyovalue(feet_penalty(self))
         if foot_pen > 1e-3:
             visual.error('Foot penalty seems to be unsolved')
 
         if detailed is True:
             from pyomo.util.infeasible import log_infeasible_constraints
             print('Infeasible constraints:')
-            log_infeasible_constraints(self.m)
+            log_infeasible_constraints(self.m, tol=tol)
 
             from pyomo.util.infeasible import log_infeasible_bounds
             print('Infeasible bounds:')
-            log_infeasible_bounds(self.m)
+            log_infeasible_bounds(self.m, tol=tol)
 
     # Figure out how to handle constraints etc with this presolve approach. Eg min distance, etc
     def presolve(self, collocation: str, nfe: int, setup_func: Callable[['System3D'], None], no_C: bool,
@@ -561,7 +562,7 @@ class System3D:
                                        **default_solver_kwargs).solve(new_sys.m, tee=True)
 
         from pyomo.opt import TerminationCondition
-        if results.solver.termination_condition == TerminationCondition.infeasible:
+        if results.solver.termination_condition == TerminationCondition.infeasible:  # type: ignore
             utils.warn('Presolving returned an infeasible result')
 
         self.init_from_robot(new_sys)

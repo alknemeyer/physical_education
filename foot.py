@@ -1,15 +1,21 @@
+from typing import Any, Dict, List, Callable, Optional, Tuple, Union, Iterable, TYPE_CHECKING
+from typing_extensions import TypedDict
 import sympy as sp
 import numpy as np
 import itertools
-from sympy import Matrix as Mat
-from typing import Any, Dict, List, Callable, Optional, Tuple, Union, Iterable
 
-from pyomo.environ import (
-    ConcreteModel, Param, Set, Var, Constraint
+from .argh import (
+    ConcreteModel, Param, Set, Var, Constraint, Mat
 )
-
+from .system import System3D
+from .links import Link3D
 from . import utils
-from .variable_list import VariableList
+
+
+if TYPE_CHECKING:
+    from .variable_list import VariableList
+
+PlotConfig = TypedDict('PlotConfig', plot_forces=bool, force_scale=float)
 
 
 class Foot3D:
@@ -25,8 +31,10 @@ class Foot3D:
         self.Lz = sp.Symbol('L_{%s/z}' % name)
         self.L = Mat(self.D).T @ self.Lx + Mat([0, 0, self.Lz])
 
-        self._plot_config: Dict[str] = {
-            'plot_forces': True, 'force_scale': 1/10}
+        self._plot_config: PlotConfig = {
+            'plot_forces': True,
+            'force_scale': 1/10,
+        }
 
     def calc_eom(self, q, dq, ddq) -> Mat:
         self.Pb_I_vel = self.Pb_I.jacobian(q) @ dq
@@ -35,23 +43,23 @@ class Foot3D:
         return jac_L.T @ self.L
 
     def add_vars_to_pyomo_model(self, m: ConcreteModel):
-        assert isinstance(
-            self.friction_coeff, float), f'The friction_coeff for {self.name} must be set to a float'
+        assert isinstance(self.friction_coeff, float), \
+            f'The friction_coeff for {self.name} must be set to a float'
 
         # parameter and sets
-        friction_coeff = Param(
-            initialize=self.friction_coeff, name='friction_coeff')
+        friction_coeff = Param(initialize=self.friction_coeff,
+                               name='friction_coeff')
         xy_set = Set(initialize=('x', 'y'), name='xy_set', ordered=True)
         fric_set = Set(initialize=range(8), name='fric_set', ordered=True)
 
         GRFxy = Var(m.fe, m.cp, fric_set, name='GRFxy', bounds=(0, 30))
-        GRFz = Var(m.fe, m.cp,           name='GRFz',  bounds=(0, 30))
+        GRFz = Var(m.fe, m.cp,            name='GRFz',  bounds=(0, 30))
 
         # dummy vars equal to parts from EOM
         foot_height = Var(m.fe, m.cp, name='foot_height', bounds=(0, None))
         foot_xy_vel = Var(m.fe, m.cp, xy_set, name='foot_xyvel')
-        gamma = Var(m.fe, m.cp, name='gamma', bounds=(
-            0, None))  # foot xy-velocity magnitude
+        gamma = Var(m.fe, m.cp, name='gamma (foot xy-velocity magnitude)',
+                    bounds=(0, None))
 
         # penalty variables
         contact_penalty = Var(m.fe, name='contact_penalty', bounds=(0, 10))
@@ -72,15 +80,11 @@ class Foot3D:
             'slip_penalty': slip_penalty,
         }
 
-        for v in itertools.chain(self.pyomo_params.values(),
-                                 self.pyomo_sets.values(),
-                                 self.pyomo_vars.values()):
-            # v.construct()
-            # TODO: get the above working. But for now, it doesn't attach to the model :/
-            newname = f'{self.name}_{v}'
-            assert not hasattr(m, newname),\
-                f'The pyomo model already has a variable with the name "{newname}"'
-            setattr(m, newname, v)
+        utils.add_to_pyomo_model(m, self.name, [
+            self.pyomo_params.values(),
+            self.pyomo_sets.values(),
+            self.pyomo_vars.values(),
+        ])
 
     def get_pyomo_vars(self, fe: int, cp: int):
         """fe, cp are one-based!"""
@@ -138,7 +142,7 @@ class Foot3D:
 
     def add_equations_to_pyomo_model(self,
                                      sp_variables: List[sp.Symbol],
-                                     pyo_variables: VariableList,
+                                     pyo_variables: 'VariableList',
                                      collocation: str):
         friction_coeff = self.pyomo_params['friction_coeff']
         m = friction_coeff.model()
@@ -347,7 +351,7 @@ class Foot3D:
         ax1.plot(fe, foot_height, label='Foot height')
         ax1.set_xlabel('Finite element')
         ax1.set_ylabel('Height [m]')
-
+        
         ax2 = ax1.twinx()
         GRFz = utils.get_vals(self.pyomo_vars['GRFz'], tuple())
         # the color trick below is so that they don't both use the same color
@@ -361,6 +365,48 @@ class Foot3D:
 
     def __repr__(self) -> str:
         return f'Foot3D(name="{self.name}", nsides={self.nsides}, friction_coeff={self.friction_coeff})'
+
+
+def add_foot(link, at: str, name: Optional[str] = None, **kwargs):
+    """
+        `at` is usually `self.bottom_I`. Eg:
+        >>> foot.add_foot(link, at='bottom')
+        """
+    if name is None:
+        name = link.name + '_foot'
+
+    assert name not in link.nodes,\
+        f'This link already has a node with the name {name}'
+
+    assert at in ('top', 'bottom'), \
+        "Can only add ground contacts at top or bottom of foot"
+
+    Pb_I = link.bottom_I if at == 'bottom' else link.top_I
+    foot = Foot3D(str(name), Pb_I, **kwargs)
+    link.nodes[name] = foot
+    return foot
+
+
+def feet(robot_or_link: Union[System3D, Link3D]) -> List[Foot3D]:
+    from typing import cast
+    if isinstance(robot_or_link, System3D):
+        robot = robot_or_link
+        return [cast(Foot3D, node)
+                for link in robot.links
+                for node in link.nodes.values()
+                if isinstance(node, Foot3D)]
+    else:
+        link = robot_or_link
+        return [cast(Foot3D, node)
+                for node in link.nodes.values()
+                if isinstance(node, Foot3D)]
+
+
+def feet_penalty(robot: 'System3D'):
+    return sum(
+        foot.penalty_sum()
+        for foot in feet(robot)
+    )
 
 
 def friction_polygon(nsides: int) -> np.ndarray:

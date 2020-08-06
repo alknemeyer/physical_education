@@ -1,8 +1,11 @@
 """
 Some tasks for the robots in the models folder.
 """
-from .. import utils
 from typing import Dict, Any
+from .. import utils
+from ..argh import Objective
+from ..foot import feet_penalty
+from ..motor import torque_squared_penalty
 
 
 def drop_test(robot, *, z_rot: float, min_torque: bool, initial_height: float = 1.) -> Dict[str, Any]:
@@ -63,11 +66,8 @@ def drop_test(robot, *, z_rot: float, min_torque: bool, initial_height: float = 
     # objective: reduce CoT, etc
     utils.remove_constraint_if_exists(robot.m, 'cost')
 
-    from pyomo.environ import Objective
-    torque_cost = sum(link.torque.torque_squared_cost()
-                      for link in robot.links if link.has_torque_input())
-    pen_cost = sum(link.foot.penalty_sum()
-                   for link in robot.links if link.has_foot())
+    torque_cost = torque_squared_penalty(robot)
+    pen_cost = feet_penalty(robot)
     robot.m.cost = Objective(expr=(torque_cost if min_torque else 0)
                              + 1000*pen_cost)
 

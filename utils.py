@@ -1,9 +1,8 @@
-from .visual import info, debug, warn
-from pyomo.environ import ConcreteModel, Var
-from typing import Iterable, Callable, Optional, Tuple, List, Union
+from typing import Any, Iterable, Callable, Optional, Tuple, List, TypeVar, Union
 import sympy as sp
 import numpy as np
-from sympy import Matrix as Mat
+from .argh import ConcreteModel, Var, Mat, Constraint
+from .visual import info, debug, warn
 sp.init_printing()
 
 # derivatives ################################################################
@@ -12,7 +11,7 @@ sp.init_printing()
 def deriv(expr, q: Mat, dq: Mat):
     """Take the time derivative of an expression `expr` with respect to time,
     handling the chain rule semi-correctly"""
-    return (sp.diff(expr, q).T * dq)[0]
+    return (sp.diff(expr, q).T * dq)[0]  # type: ignore
 
 
 def full_deriv(var, q: Mat, dq: Mat, ddq: Mat):
@@ -41,16 +40,16 @@ def rot_x(θ: SymOrFloat) -> Mat:
 def rot_y(θ: SymOrFloat) -> Mat:
     return sp.Matrix([
         [sp.cos(θ), 0, -sp.sin(θ)],
-        [0, 1,         0],
-        [sp.sin(θ), 0, sp.cos(θ)],
+        [0,         1,          0],
+        [sp.sin(θ), 0,  sp.cos(θ)],
     ])
 
 
 def rot_z(θ: SymOrFloat) -> Mat:
     return sp.Matrix([
-        [sp.cos(θ), sp.sin(θ), 0],
+        [sp.cos(θ),  sp.sin(θ), 0],
         [-sp.sin(θ), sp.cos(θ), 0],
-        [0,         0, 1],
+        [0,                  0, 1],
     ])
 
 
@@ -103,7 +102,8 @@ def manipulator_equation(Ek: Mat, Ep: Mat, q: Mat, dq: Mat) -> Tuple[Mat, Mat, M
 def calc_velocities_and_energies(
         positions: Iterable[Mat], rotations: Iterable[Mat],
         masses: Iterable[float], inertias: Iterable[Mat],
-        q: Mat, dq: Mat, g: float = 9.81) -> Tuple[Mat, Mat, List[Mat], List[Mat]]:
+        q: Mat, dq: Mat, g: float = 9.81
+) -> Tuple[Mat, Mat, List[Mat], List[Mat]]:
     """
         Calculate and return  the kinetic and potential energies of
         a system, given lists of:
@@ -123,7 +123,7 @@ def calc_velocities_and_energies(
     # this should be sum(), but it inits the sum with the int 0, which can't
     # be added to matrices
     Ek = reduce(lambda a, b: a + b, [
-        dPx_I.T * mx * dPx_I / 2 + dωx_I.T * Ix * dωx_I / 2
+        dPx_I.T * mx * dPx_I / 2. + dωx_I.T * Ix * dωx_I / 2.
         for (dPx_I, mx, dωx_I, Ix) in zip(dPs, masses, ang_vels, inertias)
     ])
     Ep = Mat([sum(m * Mat([0, 0, g]).dot(p)
@@ -151,6 +151,7 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
         """
     import pyomo.environ
     import random
+    import math
 
     if display_vars is True:
         try:
@@ -161,7 +162,7 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
 
     func_map = {'sin': pyomo.environ.sin,
                 'cos': pyomo.environ.cos,
-                'pi': np.pi, **func_map}
+                'pi': math.pi, **func_map}
 
     if isinstance(EOM, list):
         eom = sp.Matrix(EOM)
@@ -174,7 +175,8 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
         raise ValueError('Some symbols in the eom aren\'t in `vars_in_EOM:'
                          + str(set(eom.free_symbols).difference(set(vars_in_EOM))))
 
-    funcs = [sp.lambdify(vars_in_EOM, eqn, modules=[func_map]) for eqn in eom]
+    funcs = [sp.lambdify(vars_in_EOM, eqn, modules=[func_map])  # type: ignore
+             for eqn in eom]
 
     # replace with set(EOM.free_symbols).difference(set(vars_in_EOM))?
     if test_func is True:
@@ -191,7 +193,7 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
 # simplification #################################################################
 
 
-def parsimp_worker(_arg: Tuple, allow_recur: bool = True):
+def parsimp_worker(_arg: Tuple[Any, Any], allow_recur: bool = True):
     expr, simp_func = _arg
 
     if expr.is_number or expr.is_Symbol:
@@ -232,7 +234,44 @@ def parsimp(mat: Mat, nprocs: int, f=sp.trigsimp) -> Mat:
 #     return sp.Matrix(outvals).reshape(vec.shape)
 
 
+T = TypeVar('T')
+
+
+def flatten(ls: Iterable[Iterable[T]]) -> List[T]:
+    """
+    Flatten an iterable of iterables of items into a list of items
+    """
+    return [item for sublist in ls for item in sublist]
+
 # interpolation ##############################################################
+
+
+def add_to_pyomo_model(m: ConcreteModel, prefix: str, vals: Iterable[Iterable]):
+    """
+    Add the objects in `vals` to the pyomo model `m`, prefixed with `prefix`. Eg:
+
+    ```python
+    utils.add_to_pyomo_model(m, self.name, [
+        self.pyomo_params.values(),
+        self.pyomo_sets.values(),
+        self.pyomo_vars.values()
+    ])
+    ```
+
+    or,
+
+    ```python
+    utils.add_to_pyomo_model(m, 'shoulder', [[q, dq, ddq], [q_set]])
+    ```
+    
+    where `q, dq, ddq` are pyomo `Var`'s and `q_set` is a pyomo `Set`
+    """
+    from itertools import chain
+    for v in chain(*vals):
+        newname = f'{prefix}_{v}'
+        assert not hasattr(m, newname), \
+            f'The pyomo model already has an attribute with the name "{newname}"'
+        setattr(m, newname, v)
 
 
 def def_var(m: ConcreteModel, name: str, indexes: tuple, func: Callable, bounds: tuple = (None, None)):
@@ -247,7 +286,6 @@ def def_var(m: ConcreteModel, name: str, indexes: tuple, func: Callable, bounds:
         def foot_height_constr(m, fe):
             return m.foot_height_dummy[fe] == sum(m.foot_height[fe,:]))
     """
-    from pyomo.environ import Var, Constraint
     # define the variable. eg:
     # >>> m.my_var_name = Var(m.fe, m.otherindex, bounds=(0, None))
     setattr(m, name, Var(*indexes, bounds=bounds))
@@ -319,7 +357,6 @@ def constrain_total_time(m: ConcreteModel, total_time: float):
     """
     >>> constrain_total_time(robot.m, total_time = (nfe-1)*robot.m.hm0.value)
     """
-    from pyomo.environ import Constraint
     remove_constraint_if_exists(m, 'total_time_constr')
     m.total_time_constr = Constraint(
         expr=sum(m.hm[fe] for fe in m.fe if fe != 1)*m.hm0 == total_time)
@@ -378,6 +415,7 @@ def default_solver(*,
     import platform
     from datetime import datetime
     from pyomo.opt import SolverFactory
+    from typing import Any
 
     if ipopt_path is None:
         host = platform.uname()[1]
@@ -387,7 +425,7 @@ def default_solver(*,
             ipopt_path = '~/CoinIpoptBackup/build/bin/ipopt'
             # for pardiso, use '~/Ipopt3.13-Coinbrew/dist/bin/ipopt'
 
-    opt = SolverFactory('ipopt', executable=ipopt_path)
+    opt: Any = SolverFactory('ipopt', executable=ipopt_path)
     opt.options['print_level'] = 5
     opt.options['max_cpu_time'] = max_mins * 60
     opt.options['max_iter'] = max_iter
@@ -408,8 +446,8 @@ def default_solver(*,
     for key, val in kwargs.items():
         opt.options[key] = val
 
-    info(
-        f'Optimization start time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+    tstart = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    info(f'Optimization start time: {tstart}')
     return opt
 
 
@@ -435,19 +473,15 @@ def get_vals(var: Var, idxs: Optional[Tuple] = None) -> np.ndarray:
             return arr.reshape(nfe, *idxs)
 
 
-def get_indexes(nfe: int, ncp: int, *, one_based: bool) -> List[Tuple[int, int]]:
+def get_indexes(nfe: int, ncp: int, *, one_based: bool, skipfirst: bool) -> List[Tuple[int, int]]:
     """ Get indices to index into variables, taking care of the funky first finite element
 
         >>> get_indexes(nfe=4, ncp=3, one_based=True)
         [(1, 3), (2, 1), (2, 2), (2, 3), (3, 1), (3, 2), (3, 3)]
         """
-    x = 1 if one_based else 0
-    return [(i + x, j + x) for i in range(nfe) for j in range(ncp)
-            if (i > 0 or j == ncp-1)]
-
-
-def get_indexes_(m: ConcreteModel, *, one_based: bool) -> List[Tuple[int, int]]:
-    return get_indexes(m.fe[-1], m.cp[-1], one_based=one_based)
+    offset = 1 if one_based else 0
+    return [(i + offset, j + offset) for i in range(nfe) for j in range(ncp)
+            if (i > 0 or j == ncp-1 or not skipfirst)]
 
 
 class MarkovBinaryWalk():

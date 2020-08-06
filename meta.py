@@ -8,8 +8,8 @@ VALID_META: Set[str] = set((
 ))
 
 
-def valid_meta(meta: Union[str, Iterable]):
+def is_valid(meta: Union[str, Iterable[str]]) -> bool:
     if isinstance(meta, str):
         return meta in VALID_META
     else:
-        return all(valid_meta(m) for m in meta)
+        return all(is_valid(m) for m in meta)

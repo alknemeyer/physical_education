@@ -16,59 +16,72 @@
 from typing import Callable, Tuple
 from ..links import Link3D, constrain_rel_angle
 from ..system import System3D
-from sympy import Matrix as Mat
+from ..argh import Mat
+from ..utils import warn
+from ..leg import def_leg
+from ..foot import add_foot
+from ..motor import add_torque
 
-# TODO: add meta information?
 
-def biped3D() -> Tuple[System3D,Callable[[System3D],None]]:
-    from ..utils import warn
-    warn('this probably needs fixing! especially the x/y/z and top_I stuff!')
-    warn('also, need to set masses and torques!')
-    warn('also, would probably be more useful as a model of a human')
-    raise NotImplementedError('complete biped3D!!')
-
+def biped3D() -> Tuple[System3D, Callable[[System3D], None]]:
     body = Link3D('base', '+y', base=True)
 
+    # for stabilization
+    tail = Link3D('tail', '-x', start_I=body.Pb_I)
+    body.add_hookes_joint(tail, about='xy')
+    add_torque(body, tail, about='xy')
+
     # upper left, lower left
-    L_thigh = Link3D('UL', '-z', start_I=body.Pb_I + body.Rb_I @ Mat([0, -body.length/2, 0]))
-    L_calf = Link3D('LL', '-z', start_I=L_thigh.bottom_I)\
-        .add_foot(at='bottom', nsides=8, friction_coeff=1.)
+    L_thigh = Link3D('UL', '-z', start_I=body.Pb_I +
+                     body.Rb_I @ Mat([0, -body.length/2, 0]))
+    body.add_hookes_joint(L_thigh, about='xy')
+    add_torque(body, L_thigh, about='xy')
+
+    L_calf = Link3D('LL', '-z', start_I=L_thigh.bottom_I)
+    add_foot(L_calf, at='bottom', nsides=8, friction_coeff=1.)
+    L_thigh.add_revolute_joint(L_calf, about='y')
+    add_torque(L_thigh, L_calf, about='y')
 
     # upper right, lower right
-    R_thigh = Link3D('UR', '-z', start_I=body.Pb_I + body.Rb_I @ Mat([0, body.length/2, 0]))
-    R_calf = Link3D('LR', '-z', start_I=R_thigh.bottom_I)\
-        .add_foot(at='bottom', nsides=8, friction_coeff=1.)
+    R_thigh = Link3D('UR', '-z', start_I=body.Pb_I +
+                     body.Rb_I @ Mat([0, body.length/2, 0]))
+    body.add_hookes_joint(R_thigh, about='xy')
+    add_torque(body, R_thigh, about='xy')
 
-    # add relationships between links
-    body.add_hookes_joint(L_thigh, about='xy')\
-             .add_input_torques_at(L_thigh, about='xy')
-
-    L_thigh.add_revolute_joint(L_calf, about='y')\
-           .add_input_torques_at(L_calf, about='y')
-
-    body.add_hookes_joint(R_thigh, about='xy')\
-             .add_input_torques_at(R_thigh, about='xy')
-
-    R_thigh.add_revolute_joint(R_calf, about='y')\
-           .add_input_torques_at(R_calf, about='y')
+    R_calf = Link3D('LR', '-z', start_I=R_thigh.bottom_I)
+    add_foot(R_calf, at='bottom', nsides=8, friction_coeff=1.)
+    R_thigh.add_revolute_joint(R_calf, about='y')
+    add_torque(R_thigh, R_calf, about='y')
 
     # combine into a robot
-    robot = System3D('3D biped', [body, L_thigh, L_calf, R_thigh, R_calf])
-    
+    robot = System3D(
+        '3D biped', [body, tail, L_thigh, L_calf, R_thigh, R_calf])
+
     return robot, add_pyomo_constraints
+
 
 def add_pyomo_constraints(robot: System3D):
     from math import pi as π
-    body, L_thigh, L_calf, R_thigh, R_calf = [link['q'] for link in robot.links]
+    body, tail, L_thigh, L_calf, R_thigh, R_calf = [
+        link['q'] for link in robot.links]
 
+    # tail
+    constrain_rel_angle(robot.m, 'tail_pitch',
+                        -π/2, body[:, :, 'theta'], tail[:, :, 'theta'], π/2)
+
+    constrain_rel_angle(robot.m, 'tail_taw',
+                        -π/2, body[:, :, 'psi'], tail[:, :, 'psi'], π/2)
+
+    # left leg
     constrain_rel_angle(robot.m, 'left_hip',
-                        -π/2, body[:,:,'theta'], L_thigh[:,:,'theta'], π/2)
-    
+                        -π/2, body[:, :, 'theta'], L_thigh[:, :, 'theta'], π/2)
+
     constrain_rel_angle(robot.m, 'left_knee',
-                        0, L_thigh[:,:,'theta'], L_calf[:,:,'theta'], π)
-    
+                        0, L_thigh[:, :, 'theta'], L_calf[:, :, 'theta'], π)
+
+    # right leg
     constrain_rel_angle(robot.m, 'right_hip',
-                        -π/2, body[:,:,'theta'], R_thigh[:,:,'theta'], π/2)
-    
+                        -π/2, body[:, :, 'theta'], R_thigh[:, :, 'theta'], π/2)
+
     constrain_rel_angle(robot.m, 'right_knee',
-                        0, R_thigh[:,:,'theta'], R_calf[:,:,'theta'], π)
+                        0, R_thigh[:, :, 'theta'], R_calf[:, :, 'theta'], π)

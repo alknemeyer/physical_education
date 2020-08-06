@@ -1,3 +1,4 @@
+from types import FrameType
 from typing import Optional, Tuple, List, Set, Union, Dict, Any
 from contextlib import contextmanager
 import os
@@ -40,6 +41,30 @@ def no_colour_output():
         USE_COLOURS = True
 
 
+def get_useful_info(f: FrameType) -> str:
+    # s is something like:
+    # <code object remove_constraint_if_exists at 0x000000000aeeb100, file "/home/alex/alknemeyer-msc/python/optim_lib/utils.py", line 301>
+    s = str(f.f_back.f_back.f_code)
+
+    # the indexing removes the leading '<code object' and trailing '>'
+    # the first three underscores receive 'at 0xabcd, file'
+    # the final underscore handles 'line'
+    # middle is splatted this way in case there are spaces in the file path
+    fn_name, _, _, _, *middle, _, lineno = s[13:-1].split()
+
+    # indexing removes the comma at the end + surrounding quotes (regardless of if their single or double)
+    filepath = ''.join(middle)[1:-2].rstrip('.py').lstrip('<').rstrip('>')
+
+    if 'optim_lib' in filepath:
+        # eg: '/home/alex/alknemeyer-msc/python/optim_lib/utils'
+        filepath = filepath[filepath.index('optim_lib'):].replace('/', '.')
+    elif 'ipython' in filepath:
+        # eg: 'ipython-input-34-ce5fcbaca0c1'
+        filepath = filepath[:filepath.rfind('-')]
+
+    return f'{filepath}.{fn_name}(), line {lineno}: '
+
+
 def _printutil(prefix: str, s: str, colour: str, once: bool):
     if once is True:
         if s in ONCE_SET:
@@ -49,8 +74,12 @@ def _printutil(prefix: str, s: str, colour: str, once: bool):
 
     try:
         # Ref: https://stackoverflow.com/a/57712700/
-        calling_func = f'{inspect.currentframe().f_back.f_back.f_code}(): '
-        # calling_func = inspect.getouterframes(inspect.currentframe(), 2)[2][3] + '(): '
+        # calling_func = f'{inspect.currentframe().f_back.f_back.f_code}(): '
+        frame = inspect.currentframe()
+        if frame is not None:
+            calling_func = get_useful_info(frame)
+        else:
+            calling_func = ''
     except:
         calling_func = ''
 
@@ -167,7 +196,8 @@ def plot3d_setup(figsize=(10, 10),
                    color: str = 'green',
                    alpha: float = 0.2):
         """ground_lims could be something like, (-10*lim, lim), (-lim, 10*lim)"""
-        ground = ax.plot_surface(*np.meshgrid(*ground_lims),
+        xx, yy = ground_lims
+        ground = ax.plot_surface(*np.meshgrid(xx, yy),
                                  np.zeros((2, 2)),
                                  alpha=alpha,
                                  color=color,
