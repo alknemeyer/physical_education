@@ -175,14 +175,17 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
         raise ValueError('Some symbols in the eom aren\'t in `vars_in_EOM:'
                          + str(set(eom.free_symbols).difference(set(vars_in_EOM))))
 
-    funcs = [sp.lambdify(vars_in_EOM, eqn, modules=[func_map])  # type: ignore
+    # Why pack the arguments into a vector? well... sympy lambdifies expressions
+    # by writing out a function (key part!) and then calling `eval` on it. Unfortunately,
+    # writing a python function with more than 255 arguments is a SyntaxError
+    funcs = [sp.lambdify([vars_in_EOM], eqn, modules=[func_map])  # type: ignore
              for eqn in eom]
 
     # replace with set(EOM.free_symbols).difference(set(vars_in_EOM))?
     if test_func is True:
         vals = [random.random() for _ in range(len(vars_in_EOM))]
         for func in funcs:
-            ret = func(*vals)
+            ret = func(vals)
             assert type(ret) == float, "The function didn't return a float - it's likely "\
                 "because there are symbolic variables in the EOM "\
                 "which weren't specified in `vars_in_EOM`. Got: " + \
@@ -263,7 +266,7 @@ def add_to_pyomo_model(m: ConcreteModel, prefix: str, vals: Iterable[Iterable]):
     ```python
     utils.add_to_pyomo_model(m, 'shoulder', [[q, dq, ddq], [q_set]])
     ```
-    
+
     where `q, dq, ddq` are pyomo `Var`'s and `q_set` is a pyomo `Set`
     """
     from itertools import chain

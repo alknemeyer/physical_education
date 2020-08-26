@@ -1,3 +1,16 @@
+"""
+The *_in_air functions return the coefficient 'coeff' equal to:
+
+    coeff = 1/2 * Cd * rho * A
+
+It is meant to be used in the drag force equation:
+
+    Fdrag = coeff * cos(angle) * velocity
+
+where `angle` is the angle between the norm of the area of the object and the velocity vector
+
+Source: https://en.wikipedia.org/wiki/Drag_equation
+"""
 import sympy as sp
 import numpy as np
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
@@ -14,8 +27,25 @@ if TYPE_CHECKING:
 PlotConfig = TypedDict('PlotConfig', plot_forces=bool, force_scale=float)
 
 
-def cylinder_in_air(A: float, *, Cd: float = 0.8, rho: float = 10.) -> float:
-    utils.warn('These are made-up placeholder default values! Fix!')
+# From https://en.wikipedia.org/wiki/Density#Air at T = 25 C
+DENSITY_OF_AIR = 1.184
+
+
+def cylinder_top_in_air(A: float, *, Cd: float = 0.82, rho: float = DENSITY_OF_AIR) -> float:
+    """
+    Default `Cd` of 0.82 is for a "long cylinder" from the table in
+    https://en.wikipedia.org/wiki/File:14ilf1l.svg#/media/File:14ilf1l.svg
+    
+    via https://en.wikipedia.org/wiki/Drag_coefficient
+    """
+    return 1/2 * Cd * rho * A
+
+
+def cylinder_in_air(A: float, *, Cd: float = 1.1, rho: float = DENSITY_OF_AIR) -> float:
+    """
+    Default `Cd` of 1.1 is for a human/cables from
+    https://en.wikipedia.org/wiki/Drag_coefficient#General
+    """
     return 1/2 * Cd * rho * A
 
 
@@ -176,7 +206,7 @@ class Drag3D:
     def add_equations_to_pyomo_model(self,
                                      sp_variables: List[sp.Symbol],
                                      pyo_variables: 'VariableList',
-                                     collocation: str):        
+                                     collocation: str):
         Fmag = self.pyomo_vars['Fmag']
         m = Fmag.model()
 
@@ -200,7 +230,7 @@ class Drag3D:
             if fe == 1 and cp < ncp:
                 return Constraint.Skip
             else:
-                return Fmag[fe, cp] == Fmag_rhs_func(*pyo_variables[fe, cp])
+                return Fmag[fe, cp] == Fmag_rhs_func(pyo_variables[fe, cp])
 
         setattr(m, self.name + '_Fmag_constr',
                 Constraint(m.fe, m.cp, rule=def_Fmag))
@@ -216,7 +246,7 @@ class Drag3D:
                 if fe == 1 and cp < ncp:
                     return Constraint.Skip
                 else:
-                    return dr[fe, cp, ax] == dr_rhs_funcs['xyz'.index(ax)](*pyo_variables[fe, cp])
+                    return dr[fe, cp, ax] == dr_rhs_funcs['xyz'.index(ax)](pyo_variables[fe, cp])
 
             setattr(m, self.name + '_dr_dummy',
                     Constraint(m.fe, m.cp, xyz_set, rule=def_dr_dummy))
@@ -230,7 +260,7 @@ class Drag3D:
                 if fe == 1 and cp < ncp:
                     return Constraint.Skip
                 else:
-                    return area_norm[fe, cp, ax] == area_norm_rhs_funcs['xyz'.index(ax)](*pyo_variables[fe, cp])
+                    return area_norm[fe, cp, ax] == area_norm_rhs_funcs['xyz'.index(ax)](pyo_variables[fe, cp])
 
             setattr(m, self.name + '_area_norm_dummy',
                     Constraint(m.fe, m.cp, xyz_set, rule=def_area_norm_dummy))
@@ -257,7 +287,7 @@ class Drag3D:
     def animation_setup(self, fig, ax, data: List[List[float]]):
         if self.deactivated:
             return
-        
+
         if self._plot_config['plot_forces'] is False:
             return
 
@@ -266,8 +296,8 @@ class Drag3D:
         scale = self._plot_config['force_scale']
 
         for fe0, d in enumerate(data):
-            x, y, z = [f(*d) for f in self.r_func]
-            dx, dy, dz = [f(*d)*scale for f in self.f_func]
+            x, y, z = [f(d) for f in self.r_func]
+            dx, dy, dz = [f(d)*scale for f in self.f_func]
             self.plot_data[fe0, :] = (x, y, z, dx, dy, dz)
 
     def animation_update(self, fig, ax,
@@ -303,7 +333,7 @@ class Drag3D:
     def cleanup_animation(self, fig, ax):
         if self.deactivated:
             return
-        
+
         try:
             del self.line
         except:
@@ -325,12 +355,17 @@ def add_drag(link, at: Mat, name: Optional[str] = None, **kwargs):
 
     v = sp.zeros(3, 1)
     v['xyz'.index(link.aligned_along[1])] = 1
-    A = link.length * (2 * link.radius)
+
+    if kwargs.get('cylinder_top', False):
+        from math import pi
+        coeff = cylinder_top_in_air(A = pi * link.radius**2)
+    else:
+        coeff = cylinder_in_air(A = link.length * (2 * link.radius))
 
     drag = Drag3D(str(name),
                   r=at,
                   area_norm=link.Rb_I * v,
-                  coeff=cylinder_in_air(A),
+                  coeff=coeff,
                   **kwargs)
     link.nodes[name] = drag
     return drag

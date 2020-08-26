@@ -356,8 +356,8 @@ class Link3D:
         self.plot_data = [np.empty((len(data), 3)),
                           np.empty((len(data), 3))]
         for idx, d in enumerate(data):  # xyz of top and bottom of the link
-            self.plot_data[0][idx, :] = [f(*d) for f in self.top_I_func]
-            self.plot_data[1][idx, :] = [f(*d) for f in self.bottom_I_func]
+            self.plot_data[0][idx, :] = [f(d) for f in self.top_I_func]
+            self.plot_data[1][idx, :] = [f(d) for f in self.bottom_I_func]
 
         for node in self.nodes.values():
             node.animation_setup(fig, ax, data)

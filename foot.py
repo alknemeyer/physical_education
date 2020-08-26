@@ -174,7 +174,7 @@ class Foot3D:
         def def_foot_height(m, fe, cp):    # foot height above z == 0 (xy-plane)
             if (fe == 1 and cp < ncp):
                 return Constraint.Skip
-            return foot_height[fe, cp] == self.foot_pos_func[2](*pyo_variables[fe, cp])
+            return foot_height[fe, cp] == self.foot_pos_func[2](pyo_variables[fe, cp])
 
         add_constraints('foot_height_constr', def_foot_height, (m.fe, m.cp))
 
@@ -182,7 +182,7 @@ class Foot3D:
             if (fe == 1 and cp < ncp):
                 return Constraint.Skip
             i = 0 if xy == 'x' else 1
-            return foot_xy_vel[fe, cp, xy] == self.foot_xy_vel_func[i](*pyo_variables[fe, cp])
+            return foot_xy_vel[fe, cp, xy] == self.foot_xy_vel_func[i](pyo_variables[fe, cp])
 
         add_constraints('foot_xy_vel_constr',
                         def_foot_xy_vel, (m.fe, m.cp, xy_set))
@@ -269,12 +269,12 @@ class Foot3D:
         for fe0, d in enumerate(data):
             fe = fe0 + 1
 
-            x, y, z = [f(*d) for f in self.foot_pos_func]
+            x, y, z = [f(d) for f in self.foot_pos_func]
 
             dx, dy = 0, 0
             for f in self.pyomo_sets['fric_set']:
-                dx, dy = [dx, dy] + self['GRFxy'][fe, cp,
-                                                  f].value * self.D[f, :2] * force_scale
+                dx, dy = [dx, dy] + (self['GRFxy'][fe, cp, f].value
+                                     * self.D[f, :2] * force_scale)
 
             dz = self.pyomo_vars['GRFz'][fe, cp].value * force_scale
 
@@ -351,7 +351,7 @@ class Foot3D:
         ax1.plot(fe, foot_height, label='Foot height')
         ax1.set_xlabel('Finite element')
         ax1.set_ylabel('Height [m]')
-        
+
         ax2 = ax1.twinx()
         GRFz = utils.get_vals(self.pyomo_vars['GRFz'], tuple())
         # the color trick below is so that they don't both use the same color
@@ -433,7 +433,7 @@ def friction_polygon(nsides: int) -> np.ndarray:
             0, -1, 0,
             1, -1, 0,
         ]).reshape(8, 3)
-        return D / np.linalg.norm(D, axis=1).reshape(8, 1)  # normalize by row
+        return D / np.linalg.norm(D, axis=1).reshape(8, 1)  # type: ignore # normalize by row
     else:
         raise ValueError(
             'Only 4-sided and 8-sided friction polygons are implemented at the moment')
@@ -504,7 +504,7 @@ def set_timing(nfe: int, *, time: Optional[float] = None, initial: Optional[Tupl
         nonlocal done
         done = True
 
-        if when_done is 'close':
+        if when_done == 'close':
             slider.close()
             button.close()
         else:
