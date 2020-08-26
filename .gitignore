@@ -1,5 +1,6 @@
 old/
 __pycache__/
+_attic.py
 
 # vs code
 .vscode/
