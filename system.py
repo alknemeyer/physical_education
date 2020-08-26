@@ -105,11 +105,9 @@ class System3D:
             self.sp_variables + [self.force_scale],
             func_map=func_map
         )
-        # self.eom_no_c_f = utils.lambdify_EOM(
-        #     eom_c, self.sp_variables + [self.force_scale], func_map=func_map)
 
     def make_pyomo_model(self, nfe: int, collocation: str, total_time: float,
-                         scale_forces_by: float,
+                         scale_forces_by: Optional[float] = None,
                          vary_timestep_within: Optional[Tuple[float, float]] = None,
                          presolve_no_C: bool = False,
                          include_dynamics: bool = True) -> None:
@@ -157,11 +155,14 @@ class System3D:
                 self.sp_variables, self.pyo_variables, collocation)
 
         if include_dynamics is True:
+            if scale_forces_by is None:
+                total_mass = sum(link.mass for link in self.links)
+                scale_forces_by = total_mass
             m.force_scale = Param(initialize=scale_forces_by)
 
             @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))
             def EOM_constr(m, fe, cp, i):
-                return self.eom_f[i](*self.pyo_variables[fe, cp], m.force_scale) == 0 \
+                return self.eom_f[i]([*self.pyo_variables[fe, cp], m.force_scale]) == 0 \
                     if not (fe == 1 and cp < ncp) else Constraint.Skip
         else:
             utils.warn('Not including dynamics (EOM_constr) in model')
@@ -170,6 +171,7 @@ class System3D:
         return {
             'name': self.name,
             'description': description,
+            'repr': self.__repr__(),
             'nfe': len(self.m.fe),
             'ncp': len(self.m.cp),
             'hm': utils.get_vals(self.m.hm),
