@@ -11,14 +11,18 @@ where `angle` is the angle between the norm of the area of the object and the ve
 
 Source: https://en.wikipedia.org/wiki/Drag_equation
 """
+from typing import Union
+from .links import Link3D
+from .system import System3D
 import sympy as sp
 import numpy as np
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
 from typing_extensions import TypedDict
 from . import utils
-from .argh import (
-    ConcreteModel, Param, Set, Var, Constraint, Mat
+from pyomo.environ import (
+    ConcreteModel, Param, Set, Var, Constraint,
 )
+from sympy import Matrix as Mat
 
 if TYPE_CHECKING:
     from .variable_list import VariableList
@@ -35,7 +39,7 @@ def cylinder_top_in_air(A: float, *, Cd: float = 0.82, rho: float = DENSITY_OF_A
     """
     Default `Cd` of 0.82 is for a "long cylinder" from the table in
     https://en.wikipedia.org/wiki/File:14ilf1l.svg#/media/File:14ilf1l.svg
-    
+
     via https://en.wikipedia.org/wiki/Drag_coefficient
     """
     return 1/2 * Cd * rho * A
@@ -216,7 +220,7 @@ class Drag3D:
                     Fmag[fe, cp].fix(0)
             return
 
-        from .argh import atan
+        from pyomo.environ import atan
         func_map = {
             'sqrt': lambda x: (x + 1e-6)**(1/2),
             'atan': atan,
@@ -358,9 +362,9 @@ def add_drag(link, at: Mat, name: Optional[str] = None, **kwargs):
 
     if kwargs.get('cylinder_top', False):
         from math import pi
-        coeff = cylinder_top_in_air(A = pi * link.radius**2)
+        coeff = cylinder_top_in_air(A=pi * link.radius**2)
     else:
-        coeff = cylinder_in_air(A = link.length * (2 * link.radius))
+        coeff = cylinder_in_air(A=link.length * (2 * link.radius))
 
     drag = Drag3D(str(name),
                   r=at,
@@ -369,3 +373,18 @@ def add_drag(link, at: Mat, name: Optional[str] = None, **kwargs):
                   **kwargs)
     link.nodes[name] = drag
     return drag
+
+
+def drag_forces(robot_or_link: Union[System3D, Link3D]) -> List[Drag3D]:
+    from typing import cast
+    if isinstance(robot_or_link, System3D):
+        robot = robot_or_link
+        return [cast(Drag3D, node)
+                for link in robot.links
+                for node in link.nodes.values()
+                if isinstance(node, Drag3D)]
+    else:
+        link = robot_or_link
+        return [cast(Drag3D, node)
+                for node in link.nodes.values()
+                if isinstance(node, Drag3D)]

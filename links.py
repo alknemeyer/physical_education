@@ -5,9 +5,10 @@ from typing import Any, Dict, Iterable, Optional, List, cast
 from typing_extensions import TypedDict
 import sympy as sp
 import numpy as np
-from .argh import (
-    ConcreteModel, Set, Var, Constraint, Param, Mat
+from pyomo.environ import (
+    ConcreteModel, Set, Var, Constraint, Param,
 )
+from sympy import Matrix as Mat
 from . import utils, symdef, visual
 from .template import Node
 from .variable_list import VariableList

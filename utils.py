@@ -1,7 +1,8 @@
 from typing import Any, Iterable, Callable, Optional, Tuple, List, TypeVar, Union
 import sympy as sp
 import numpy as np
-from .argh import ConcreteModel, Var, Mat, Constraint
+from pyomo.environ import ConcreteModel, Var, Constraint
+from sympy import Matrix as Mat
 from .visual import info, debug, warn
 sp.init_printing()
 

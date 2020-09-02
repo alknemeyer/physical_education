@@ -2,11 +2,11 @@ from typing import Any, Dict, List, Callable, Optional, Tuple, Union, Iterable, 
 from typing_extensions import TypedDict
 import sympy as sp
 import numpy as np
-import itertools
 
-from .argh import (
-    ConcreteModel, Param, Set, Var, Constraint, Mat
+from pyomo.environ import (
+    ConcreteModel, Param, Set, Var, Constraint,
 )
+from sympy import Matrix as Mat
 from .system import System3D
 from .links import Link3D
 from . import utils
@@ -432,8 +432,8 @@ def friction_polygon(nsides: int) -> np.ndarray:
             -1, -1, 0,
             0, -1, 0,
             1, -1, 0,
-        ]).reshape(8, 3)
-        return D / np.linalg.norm(D, axis=1).reshape(8, 1)  # type: ignore # normalize by row
+        ]).reshape(8, 3)  # normalize by row
+        return D / np.linalg.norm(D, axis=1).reshape(8, 1)  # type: ignore
     else:
         raise ValueError(
             'Only 4-sided and 8-sided friction polygons are implemented at the moment')

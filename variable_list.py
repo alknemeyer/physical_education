@@ -1,5 +1,5 @@
 from typing import Tuple, List, Iterable, TYPE_CHECKING
-from .argh import Var, ConcreteModel
+from pyomo.environ import Var, ConcreteModel
 from .utils import flatten
 
 
@@ -19,7 +19,7 @@ class VariableList:
     def __init__(self, m: ConcreteModel, sources_of_vars: Iterable['Link3D']):
         self.sources_of_vars = sources_of_vars
 
-        self._var_list: List[List[Var]] = [
+        self._var_list: List[List[List[Var]]] = [
             [self._get_vars(fe, cp) for cp in m.cp] for fe in m.fe
         ]
 

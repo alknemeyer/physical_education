@@ -1,9 +1,10 @@
 # TODO: import from `typing` when not limited by python version
 from typing_extensions import Protocol
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
-from .argh import (
-    ConcreteModel, Param, Set, Var, Mat
+from pyomo.environ import (
+    ConcreteModel, Param, Set, Var,
 )
+from sympy import Matrix as Mat
 import sympy as sp
 import numpy as np
 

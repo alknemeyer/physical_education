@@ -1,9 +1,10 @@
 import sympy as sp
 import numpy as np
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, TYPE_CHECKING, Union
-from .argh import (
-    ConcreteModel, Constraint, Set, Var, Param, inequality, Mat
+from typing import Any, Dict, Iterator, List, Optional, Tuple, TYPE_CHECKING, Union
+from pyomo.environ import (
+    ConcreteModel, Constraint, Set, Var, Param,
 )
+from sympy import Matrix as Mat
 from . import utils, visual
 from .system import System3D
 from .links import Link3D
@@ -58,7 +59,7 @@ class _TorqueSpeedLimit:
         ω_n = self.no_load_speed
 
         def torque_speed_limit_constr(m, fe, idx, posneg):
-            ω = self.rel_angle_vels_f[idx](*pyo_variables[fe, 1])
+            ω = self.rel_angle_vels_f[idx](pyo_variables[fe, 1])
             τ = Tc[fe, idx]
 
             # return inequality(- τ_s, τ * (1 - ω / ω_n), τ_s)
@@ -77,7 +78,7 @@ class _TorqueSpeedLimit:
         setattr(m, constraintname,
                 Constraint(m.fe, Tc_set, ('+', '-'), rule=torque_speed_limit_constr))
 
-    def plot(self):
+    def plot(self, _ax=None, markersize: float = 5.):
         m = self.Tc.model()
         # ncp = len(m.cp)
         data: List[List[float]] = [
@@ -89,25 +90,32 @@ class _TorqueSpeedLimit:
         ω = np.zeros(τ.shape)
         for idx, ω_f in enumerate(self.rel_angle_vels_f):
             for fe in m.fe:
-                ω[fe-1, idx] = ω_f(*data[fe-1])
+                ω[fe-1, idx] = ω_f(data[fe-1])
 
         from matplotlib import pyplot as plt
+        if _ax is None:
+            _, ax = plt.subplots()
+        else:
+            ax = _ax
 
         # plot the torque-speed curve line
         τ_sn, τ_sp = self.torque_bounds
         ω_n = self.no_load_speed
         # plt.plot([0,  2*ω_n], [τ_sp, 0], '--', color='black')
         # plt.plot([-2*ω_n, 0], [0, τ_sn], '--', color='black')
-        plt.plot([0,  2*ω_n], [τ_sp, τ_sn], '--', color='black')
-        plt.plot([-2*ω_n, 0], [τ_sp, τ_sn], '--', color='black')
+        ax.plot([0,  2*ω_n], [τ_sp, τ_sn], '--', color='black')
+        ax.plot([-2*ω_n, 0], [τ_sp, τ_sn], '--', color='black')
 
         # torque limit line
-        plt.plot([-2*ω_n, 0], [τ_sp, τ_sp], '--', color='black')
-        plt.plot([0,  2*ω_n], [τ_sn, τ_sn], '--', color='black')
+        ax.plot([-2*ω_n, 0], [τ_sp, τ_sp], '--', color='black')
+        ax.plot([0,  2*ω_n], [τ_sn, τ_sn], '--', color='black')
 
         # plot torque vs speed
         for i in range(τ.shape[1]):
-            plt.scatter(ω[:, i], τ[:, i], label=f'$\\tau_{i}$')
+            ax.scatter(ω[:, i], τ[:, i], s=markersize, label=f'$\\tau_{i}$')
+
+        if _ax is not None:
+            return ax
 
         plt.title(f'Torque speed curve in {self.name}')
         plt.xlabel('Angular velocity $\\omega$ [rad/s]')
@@ -115,6 +123,8 @@ class _TorqueSpeedLimit:
         plt.legend()
         plt.grid(True)
         plt.show()
+
+        return ax
 
     def __repr__(self) -> str:
         return f'_TorqueSpeedLimit(torque_bounds={self.torque_bounds}, no_load_speed={self.no_load_speed}, axes={self.axes})'
@@ -329,7 +339,7 @@ def torque_squared_penalty(robot: 'System3D'):
 
 # TODO: this outputs an Iterator with `len(m.fe) * len(Tc_set)` elements
 # perhaps an Iterator of Iterators would make more sense?
-def power(motor: Motor3D, pyo_variables) -> Iterator:
+def power(motor: Motor3D, pyo_variables, fe: Optional[int] = None) -> Iterator:
     if hasattr(motor, 'torque_speed_limit'):
         rel_angle_vels_f = motor.torque_speed_limit.rel_angle_vels_f
 
@@ -339,11 +349,17 @@ def power(motor: Motor3D, pyo_variables) -> Iterator:
         v = pyo_variables
 
         # ω * τ
-        return (
-            rel_angle_vels_f[idx](*v[fe, 1]) * Tc[fe, idx]
-            for fe in m.fe
-            for idx in Tc_set
-        )
+        if fe is not None:
+            return (
+                rel_angle_vels_f[idx](v[fe, 1]) * Tc[fe, idx]
+                for idx in Tc_set
+            )
+        else:
+            return (
+                rel_angle_vels_f[idx](v[fe, 1]) * Tc[fe, idx]
+                for fe in m.fe
+                for idx in Tc_set
+            )
     else:
         raise RuntimeError(
             'Current impementation requires a TorqueSpeedLimit :/')
@@ -364,7 +380,7 @@ def work_squared_penalty(robot: 'System3D', with_time: bool):
 
         # enumerate returns 0-based, pyomo expects 1-based
         return sum(
-            sum(hm[(fe%nfe)+1]*hm0*P**2
+            sum(hm[(fe % nfe)+1]*hm0*P**2
                 for (fe, P) in enumerate(power(motor, robot.pyo_variables)))
             for motor in torques(robot)
         )
@@ -373,3 +389,19 @@ def work_squared_penalty(robot: 'System3D', with_time: bool):
             sum(P**2 for P in power(motor, robot.pyo_variables))
             for motor in torques(robot)
         )
+
+
+def max_power_constraint(robot: 'System3D', maxpower: float):
+    def powerlimit_f(m, fe: int):
+        P = sum(
+            sum(power(motor, robot.pyo_variables, fe))
+            for motor in torques(robot)
+        )
+        return P**2 <= maxpower**2
+
+    constraintname = f'{robot.name}_maxpower'
+    assert not hasattr(robot.m, constraintname), \
+        f'The model already has a constraint with the name {constraintname}'
+
+    setattr(robot.m, constraintname,
+            Constraint(robot.m.fe, rule=powerlimit_f))

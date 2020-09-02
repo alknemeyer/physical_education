@@ -2,9 +2,10 @@
 from typing import Any, Callable, Dict, Iterable, List, Optional, TypeVar, Tuple, Union, TYPE_CHECKING
 import sympy as sp
 import numpy as np
-from .argh import (
-    ConcreteModel, RangeSet, Param, Var, Constraint, ConstraintList, Mat
+from pyomo.environ import (
+    ConcreteModel, RangeSet, Param, Var, Constraint, ConstraintList,
 )
+from sympy import Matrix as Mat
 from . import utils, variable_list, visual
 from . import collocation as _collocation
 from .utils import flatten
@@ -94,7 +95,7 @@ class System3D:
         utils.info(f'Number of operations in EOM is {sp.count_ops(eom)}')
 
         # TODO: the lambdifying step actually takes quite long -- any way to speed it up?
-        from .argh import atan
+        from pyomo.environ import atan
         func_map = {
             'sqrt': lambda x: (x+1e-9)**(1/2),
             'atan': atan,
@@ -286,16 +287,17 @@ class System3D:
                 link.cleanup_animation(fig, ax)
             del fig, ax
 
-    def animate(self, view_along: Union[Tuple[float, float], str],
+    def animate(self,
+                view_along: Union[Tuple[float, float], str],
                 t_scale: float = 1.,
-                camera: Optional[Tuple] = None,
+                camera: Optional[Union[Tuple[float, float],
+                                       Tuple[float, float, float]]] = None,
                 lim: Optional[float] = None,
                 plot3d_config: Dict = {},
                 lims: Optional[Tuple[Tuple, Tuple, Tuple]] = None,
                 track: Optional[str] = None,
                 dt: Optional[float] = None,
-                save_to: Optional[str] = None,
-                keyframes: Optional[List[int]] = None):
+                save_to: Optional[str] = None):
         # need to import this to get 3D plots working, for some reason
         from mpl_toolkits import mplot3d
         import matplotlib.animation
@@ -435,6 +437,7 @@ class System3D:
         assert interpolation == 'linear'
 
         import math
+
         def valid_num(num): return not (
             num is None or math.isnan(num) or math.isinf(num)
         )
@@ -503,7 +506,8 @@ class System3D:
 
             if len(skipped_vars) > 0:
                 from textwrap import shorten
-                utils.debug(shorten(f'skipped variables because they are fixed: {skipped_vars}', width=100))
+                utils.debug(
+                    shorten(f'skipped variables because they are fixed: {skipped_vars}', width=100))
 
     def __repr__(self) -> str:
         child_links = '\n  '.join(str(link) + ',' for link in self.links)
@@ -511,7 +515,7 @@ class System3D:
 
     def post_solve(self, costs: Optional[Dict[str, Any]] = None, detailed: bool = False, tol: float = 1e-6):
         from .foot import feet_penalty
-        from .argh import value as pyovalue
+        from pyomo.environ import value as pyovalue
         print('Total cost:', pyovalue(self.m.cost))
 
         if costs is not None:

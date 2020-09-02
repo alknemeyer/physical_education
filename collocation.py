@@ -14,14 +14,15 @@
     >>> collocation.check_collocation_method('radua_56')  # raises ValueError
     ```
 """
-from .argh import ConcreteModel, Var, Constraint
+from pyomo.environ import ConcreteModel, Var, Constraint  # type: ignore
 from typing import Dict, Callable, Tuple
 
 # eg: input is a string like 'implicit_euler'
 #     output is a tuple of:
 #         a function which takes two pyomo Var's and returns a function
 #         an integer of the corresponding number of collocation points
-_collocation_mapping: Dict[str, Tuple[Callable[[Var,Var],Callable], int]] = {}
+_collocation_mapping: Dict[str,
+                           Tuple[Callable[[Var, Var], Callable], int]] = {}
 
 
 def get_ncp(collocation: str):

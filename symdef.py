@@ -1,5 +1,5 @@
 import sympy as sp
-from .argh import Mat
+from sympy import Matrix as Mat
 from typing import Tuple
 
 USE_LATEX: bool = True

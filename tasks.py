@@ -1,6 +1,6 @@
 from typing import Tuple, TYPE_CHECKING
 from . import utils
-from .argh import Constraint
+from pyomo.environ import Constraint
 
 if TYPE_CHECKING:
     from .system import System3D
@@ -15,6 +15,9 @@ def periodic(robot: 'System3D', but_not: Tuple[str, ...], but_not_vel: Tuple[str
     >>> periodic(robot, but_not=('x', 'y'), but_not_vel=('x', 'y'))
     ```
     """
+    assert robot.m is not None,\
+        'robot does not have a pyomo model defined on it'
+
     nfe, ncp = len(robot.m.fe), len(robot.m.cp)
 
     utils.remove_constraint_if_exists(robot.m, 'periodic_q')

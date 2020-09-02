@@ -20,7 +20,7 @@ from ..foot import add_foot
 from ..motor import add_torque
 
 
-def monoped3D() -> Tuple[System3D, Callable[[System3D], None]]:
+def model() -> Tuple[System3D, Callable[[System3D], None]]:
     # create links: body, upper leg, lower leg
     base = Link3D('base', '+x', base=True,
                   mass=5., radius=0.4, length=0.4,
@@ -38,10 +38,12 @@ def monoped3D() -> Tuple[System3D, Callable[[System3D], None]]:
 
     # add relationships between links
     base.add_hookes_joint(upper, about='xy')
-    add_torque(base, upper, about='xy', torque_bounds=(-2., 2.), no_load_speed=20)
+    add_torque(base, upper, about='xy',
+               torque_bounds=(-2., 2.), no_load_speed=20)
 
     upper.add_revolute_joint(lower, about='y')
-    add_torque(upper, lower, about='y', torque_bounds=(-2., 2.), no_load_speed=20)  # was: bounds=(-2, 2)
+    add_torque(upper, lower, about='y', torque_bounds=(-2., 2.),
+               no_load_speed=20)
 
     # combine into a robot
     robot = System3D('3D monoped', [base, upper, lower])
@@ -50,6 +52,9 @@ def monoped3D() -> Tuple[System3D, Callable[[System3D], None]]:
 
 
 def add_pyomo_constraints(robot: System3D):
+    assert robot.m is not None,\
+        'robot does not have a pyomo model defined on it'
+
     from math import pi as π
     body, thigh, calf = [link['q'] for link in robot.links]
 

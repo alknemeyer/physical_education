@@ -3,7 +3,7 @@ Some tasks for the robots in the models folder.
 """
 from typing import Dict, Any
 from .. import utils
-from ..argh import Objective
+from pyomo.environ import Objective
 from ..foot import feet_penalty
 from ..motor import torque_squared_penalty
 

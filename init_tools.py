@@ -1,4 +1,5 @@
 # this file really should be named better...
+from pyomo.environ import Var
 import numpy as np
 from typing import Callable, Optional
 
@@ -47,11 +48,12 @@ def sin_around_touchdown(fe: int, nfe: int) -> np.ndarray:
     π = np.pi  # type: ignore
     offset = (fe-1)/(nfe-1) * 2*π
     x = np.linspace(0, 2*π, num=nfe) - offset
-    return np.sin(x)  # type: ignore # , np.cos(x), -np.sin(x)  <- velocity and acceleration
+    # , np.cos(x), -np.sin(x)  <- velocity and acceleration
+    return np.sin(x)  # type: ignore
 
 
 def bound_penalty_and_add_transport_cost(robot: System3D, penalty_limit: float):
-    from .argh import Objective
+    from pyomo.environ import Objective
     utils.info('Deleting previous cost function')
     robot.m.del_component('cost')
 
@@ -98,7 +100,7 @@ def add_costs(robot,
               transport_axis: str = 'x',
               scale: float = 0.001,
               **other_costs) -> dict:  # time cost? distance cost?
-    from .argh import Objective
+    from pyomo.environ import Objective
     utils.remove_constraint_if_exists(robot.m, 'cost')
 
     body = robot.links[0]
@@ -133,8 +135,8 @@ def increase_motor_limits(robot: System3D, *, torque_bound: float, no_load_speed
     >>> increase_motor_limits(robot, torque_bound=5., no_load_speed=100.)
     >>> ol.motor.torques(robot)[0]['Tc'].pprint()
     """
-    assert robot.m is not None, \
-        'robot.make_pyomo_model() must be called before calling this function'
+    assert robot.m is not None,\
+        'robot does not have a pyomo model defined on it'
 
     for motor_ in motor.torques(robot):
         for Tc in motor_['Tc'][:, :]:
@@ -156,7 +158,8 @@ def fecp2val(nfe: int, ncp: int):
 
 
 # UNTESTED
-from .argh import Var
+
+
 def init_with_function(var: Var, func: Callable[[float], float],
                        lowerbound: Optional[float] = None,
                        otherinds: tuple = (),

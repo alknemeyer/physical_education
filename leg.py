@@ -2,7 +2,7 @@ from typing import Dict, List, Tuple
 import sympy as sp
 from .links import Link3D
 from . import utils
-from .argh import Constraint, Var
+from pyomo.environ import Constraint, Var
 from .motor import add_torque
 from .foot import add_foot
 

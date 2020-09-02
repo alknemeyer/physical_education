@@ -16,14 +16,12 @@
 from typing import Callable, Tuple
 from ..links import Link3D, constrain_rel_angle
 from ..system import System3D
-from ..argh import Mat
-from ..utils import warn
-from ..leg import def_leg
+from sympy import Matrix as Mat
 from ..foot import add_foot
 from ..motor import add_torque
 
 
-def biped3D() -> Tuple[System3D, Callable[[System3D], None]]:
+def model() -> Tuple[System3D, Callable[[System3D], None]]:
     body = Link3D('base', '+y', base=True)
 
     # for stabilization
@@ -61,6 +59,9 @@ def biped3D() -> Tuple[System3D, Callable[[System3D], None]]:
 
 
 def add_pyomo_constraints(robot: System3D):
+    assert robot.m is not None,\
+        'robot does not have a pyomo model defined on it'
+
     from math import pi as π
     body, tail, L_thigh, L_calf, R_thigh, R_calf = [
         link['q'] for link in robot.links]
