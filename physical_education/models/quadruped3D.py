@@ -125,10 +125,9 @@ def model(params: Dict[str, Any]) -> Tuple[System3D, Callable[[System3D], None]]
         """Define a leg and attach it to the front/back right/left of `body`.
             Only really makes sense when `body` is aligned along the `x`-axis"""
         # maybe flip x (or y)
+        # the model is considered to face along the x axis (so front/back
+        # refers to changes in the y value).
         def mfx(x): return x if front else -x
-        # typo... these should be swapped, since the model is considered to face
-        # along the y axis (so front/back refers to changes in the y value).
-        # TODO: fix, but test straight afterwards in case it breaks something!
         def mfy(y): return y if right else -y
 
         start_I = body.Pb_I + \
@@ -166,6 +165,10 @@ def model(params: Dict[str, Any]) -> Tuple[System3D, Callable[[System3D], None]]
 
 
 def add_pyomo_constraints(robot: System3D) -> None:
+    # π/3 = 60 degrees
+    # π/2 = 90 degrees
+    # π/4 = 45 degrees
+
     assert robot.m is not None,\
         'robot does not have a pyomo model defined on it'
 
@@ -175,22 +178,22 @@ def add_pyomo_constraints(robot: System3D) -> None:
             link['q'] for link in robot.links]
 
     # spine can't bend too much:
-    # it only has pitch and yaw degrees of freedom. No need to constrain roll
+    # it only has pitch and roll relative degrees of freedom. No need to constrain yaw
     constrain_rel_angle(robot.m, 'spine_pitch',
-                        -π/3, link_body_B[:, :, 'theta'], link_body_F[:, :, 'theta'], π/3)
-    constrain_rel_angle(robot.m, 'spine_yaw',
-                        -π/3, link_body_B[:, :, 'psi'], link_body_F[:, :, 'psi'], π/3)
+                        -π/4, link_body_B[:, :, 'theta'], link_body_F[:, :, 'theta'], π/4)
+    constrain_rel_angle(robot.m, 'spine_roll',
+                        -π/4, link_body_B[:, :, 'phi'], link_body_F[:, :, 'phi'], π/4)
 
     # tail can't go too crazy:
     constrain_rel_angle(robot.m, 'tail_body_pitch',
                         -π/3, link_body_B[:, :, 'theta'], link_tail0[:, :, 'theta'], π/3)
     constrain_rel_angle(robot.m, 'tail_body_yaw',
-                        -π/3, link_body_B[:, :, 'psi'], link_tail0[:, :, 'psi'], π/3)
+                        -π/3, link_body_B[:, :, 'phi'], link_tail0[:, :, 'phi'], π/3)
 
     constrain_rel_angle(robot.m, 'tail_tail_pitch',
                         -π/2, link_tail0[:, :, 'theta'], link_tail1[:, :, 'theta'], π/2)
     constrain_rel_angle(robot.m, 'tail_tail_yaw',
-                        -π/2, link_tail0[:, :, 'psi'], link_tail1[:, :, 'psi'], π/2)
+                        -π/2, link_tail0[:, :, 'phi'], link_tail1[:, :, 'phi'], π/2)
 
     # legs: hip abduction and knee
     for body, thigh, calf, name in ((link_body_F, link_UFL, link_LFL, 'FL'),
@@ -200,7 +203,7 @@ def add_pyomo_constraints(robot: System3D) -> None:
         constrain_rel_angle(robot.m, name + '_hip_pitch',
                             -π/2, body[:, :, 'theta'], thigh[:, :, 'theta'], π/2)
         constrain_rel_angle(robot.m, name + '_hip_aduct',
-                            -π/4, body[:, :, 'psi'], thigh[:, :, 'psi'], π/4)
+                            -π/8, body[:, :, 'phi'], thigh[:, :, 'phi'], π/8)
 
         lo, up = (-π, 0) if name.startswith('B') else (0, π)
         constrain_rel_angle(robot.m, name + '_knee',

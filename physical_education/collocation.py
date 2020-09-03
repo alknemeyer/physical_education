@@ -14,7 +14,7 @@
     >>> collocation.check_collocation_method('radua_56')  # raises ValueError
     ```
 """
-from pyomo.environ import ConcreteModel, Var, Constraint  # type: ignore
+from pyomo.environ import ConcreteModel, Var, Constraint
 from typing import Dict, Callable, Tuple
 
 # eg: input is a string like 'implicit_euler'

@@ -1,8 +1,7 @@
-old/
 __pycache__/
-_attic.py
+attic/
 
-# vs code
+# vs code configuration/workspace
 .vscode/
 
 # Jupyter stuff
