@@ -23,11 +23,15 @@ On to the code:
 ```python
 import physical_education as pe
 
+# create a link called 'based', aligned along the x-axis.
+# by default, we use Euler-321 for angle orientation
 base = pe.links.Link3D(
     'base', '+x', base=True,
     mass=5., radius=0.4, length=0.4,
 )
 
+# we think of this link as starting at the center
+# of mass of the base, and pointing downwards (-z)  
 upper = pe.links.Link3D(
     'upper', '-z', start_I=base.Pb_I,
     mass=.6, radius=0.01, length=0.25,
@@ -68,26 +72,26 @@ robot = pe.system.System3D(
 # calculate the equations of motion of the robot
 # symbolically, then lambdify them into a regular
 # python function
-# we'll also simplify the equations in parallel, using 8 cores
+# we'll simplify the equations in parallel, using 8 cores
 robot.calc_eom(
     simp_func = lambda x: pe.utils.parsimp(x, nprocs=8),
 )
 
 # create a pyomo model
 # we'll discretize the problem into 50 finite elements,
-# use implicit euler for integration, and give a base total
-# time of 1 second whilst allowing individual finite elements
-# to vary by 20%
+# use implicit euler for integration, and give a starting
+# total time of 1 second whilst allowing individual
+# finite elements to vary by +-20%
 robot.make_pyomo_model(
     nfe=50, collocation='implicit_euler',
     total_time=1.0, vary_timestep_within=(0.8, 1.2),
 )
 
 # let's start with a drop test
-# we'll have to write some code, but the idea is that this
-# library gives you the tools + example code to complete a
-# task. It doesn't have all tasks built in - that's what your
-# research is about!
+# we'll have to write some code, but the idea is that
+# this library gives you the tools + example code to
+# complete a task. It doesn't have all tasks built in -
+# that's what your research is about!
 initial_height = 3.0  # meters
 
 nfe = len(robot.m.fe)
@@ -129,17 +133,22 @@ robot.m.cost = Objective(expr=1000*pen_cost)
 
 # solve!
 # this assumes you have IPOPT installed, along with
-# linear solver HSL MA86
+# linear solver HSL MA86. Let's use L-BGFS, which is
+# _much_ faster for large models
 pe.utils.default_solver(
     max_mins=10, solver='ma86'
-    OF_hessian_approximation='limited-memory'
+    OF_hessian_approximation='limited-memory',
 ).solve(robot.m, tee=True)
 
 # check final penalty value, and so on
 robot.post_solve(costs)
 
-# animate the result at 1/3 speed
-robot.animate(view_along=(35, -120), t_scale=3)
+# animate the result at 1/3 speed, and view along the x-axis
+robot.animate(view_along='x', t_scale=3)
+
+# let's also view along an elevation of -120 degrees, and
+# an azimouth of 35 degrees
+robot.animate(view_along=(35, -120))
 ```
 
 ## Getting started
