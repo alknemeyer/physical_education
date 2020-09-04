@@ -172,3 +172,18 @@ robot.animate(view_along=(35, -120))
    Jupyterlab is the current version of the Jupyter IDE, which is used to view and run jupyter notebooks. Alex will shamelessly plug his [guide](https://alknemeyer.github.io/remote-notebooks/) on a good setup for this, if you have two computers: a laptop which you want to work on, and a beefy computer where you want optimizations to run
 
 5. Look through examples, and then start your project. Good luck, and please raise an issue if anything is unclear
+
+
+## Structure of the codebase
+### `system.py`
+### `links.py`
+### Nodes
+### Other useful functions
+
+## Summaries of important libraries
+### sympy
+### pyomo
+### matplotlib
+### dill
+### types
+#### stub files
