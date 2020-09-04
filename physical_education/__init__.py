@@ -1,3 +1,6 @@
+"""A library for research into legged critters"""
+__version__ = '0.1'
+
 from . import (
     foot,
     leg,

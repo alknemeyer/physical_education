@@ -34,6 +34,3 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Typing :: Typed",
 ]
-
-[tool.flit.scripts]
-flit = "flit:main"
