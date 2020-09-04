@@ -6,3 +6,6 @@ attic/
 
 # Jupyter stuff
 .ipynb_checkpoints/
+
+# packing (via flit)
+dist/
