@@ -123,6 +123,7 @@ lower['q'][nfe, ncp, 'theta'].setub(-ang)
 body['q'][nfe, ncp, 'z'].setlb(0.2)
 
 # objective: reduce foot penalty (more on that later!)
+from pyomo.environ import Objective
 pen_cost = pe.foot.feet_penalty(robot)
 robot.m.cost = Objective(expr=1000*pen_cost)
 
