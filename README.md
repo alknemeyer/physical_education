@@ -140,3 +140,25 @@ robot.post_solve(costs)
 # animate the result at 1/3 speed
 robot.animate(view_along=(35, -120), t_scale=3)
 ```
+
+## Getting started
+
+1. Decide on a python implementation
+
+   Larger models benefit tremendously from using [PyPy](https://www.pypy.org/) instead of [CPython](https://www.python.org/downloads/) as your python implementation. If you want more clarity on the differences, read [this explanation](https://stackoverflow.com/questions/17130975/python-vs-cpython#17130986). Anecdotally, PyPy is at least twice as fast when simplifying large models using sympy, and twenty times as fast when setting up models using pyomo. That's the difference of 30 seconds vs 10 minutes!
+
+2. Install a nonlinear optimizer, like IPOPT
+
+   ... which is at times much easier said than done. Instructions are [here](https://github.com/coin-or/Ipopt#getting-started). You'll also need to install a linear solver. The HSL solvers are the best for many tasks, and their multi-core MA86 solver in particular is very fast. There's [a page](http://www.hsl.rl.ac.uk/ipopt/) about HSL + Ipopt, which you should read. This step is usually far easier when done in a Unix environment, like [Ubuntu](https://ubuntu.com/) and others like it
+
+3. Install `physical_education`. It's recommended that you use a virtual environment - whether that's [conda](https://docs.conda.io/en/latest/), [venv](https://docs.python.org/3/tutorial/venv.html), [poetry](https://python-poetry.org/) or whatever else seems easiest to you
+
+   ```bash
+   python -m pip install physical_education
+   ```
+
+4. Optional, but highly recommended: install [jupyterlab](https://jupyterlab.readthedocs.io/)
+
+   Jupyterlab is the current version of the Jupyter IDE, which is used to view and run jupyter notebooks. Alex will shamelessly plug his [guide](https://alknemeyer.github.io/remote-notebooks/) on a good setup for this, if you have two computers: a laptop which you want to work on, and a beefy computer where you want optimizations to run
+
+5. Look through examples, and then start your project. Good luck, and please raise an issue if anything is unclear
