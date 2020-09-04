@@ -1,0 +1,35 @@
+[build-system]
+requires = ["flit_core >=2,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.scripts]
+flit = "flit:main"
+
+[tool.flit.metadata]
+module = "physical_education"
+author = "Alexander Knemeyer"
+author-email = "alknemeyer@hey.com"
+home-page = "https://github.com/alknemeyer/physical_education"
+requires = [
+    "dill",
+    "matplotlib ~= 3.1",
+    "numpy",
+    "pyomo",
+    "sympy",
+    "typing_extensions",
+]
+description-file = "README.md"
+requires-python = ">=3.6"
+keywords = "trajectory optimization,dynamics,robotics,biomechanics"
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
