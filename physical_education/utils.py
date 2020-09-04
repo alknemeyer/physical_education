@@ -368,6 +368,14 @@ def constrain_total_time(m: ConcreteModel, total_time: float):
 # other utils for pyomo ######################################################
 
 
+IPOPT_PATH: Union[str, None] = None
+
+
+def set_ipopt_path(ipopt_path: str):
+    global IPOPT_PATH
+    IPOPT_PATH = ipopt_path
+
+
 def default_solver(*,
                    max_mins: int,
                    ipopt_path: Optional[str] = None,
@@ -416,18 +424,18 @@ def default_solver(*,
     understand IPOPT's output
     """
     import os
-    import platform
     from datetime import datetime
     from pyomo.opt import SolverFactory
     from typing import Any
 
     if ipopt_path is None:
-        host = platform.uname()[1]
-        if host == 'scruffy':
-            ipopt_path = '~/alknemeyer-msc/IPOPT/dist/bin/ipopt'
-        elif host == 'minibeast':
-            ipopt_path = '~/CoinIpoptBackup/build/bin/ipopt'
-            # for pardiso, use '~/Ipopt3.13-Coinbrew/dist/bin/ipopt'
+        global IPOPT_PATH
+        if IPOPT_PATH is not None:
+            ipopt_path = IPOPT_PATH
+        # better to make this warning, or hope that IPOPT is on their path?
+        else:
+            warn('No path set for ipopt. Pass argument `ipopt_path`, '
+                 'or call `utils.set_ipopt_path(str)`', once=True)
 
     opt: Any = SolverFactory('ipopt', executable=ipopt_path)
     opt.options['print_level'] = 5
