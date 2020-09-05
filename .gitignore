@@ -9,3 +9,6 @@ attic/
 
 # packing (via flit)
 dist/
+
+# default filename of ipopt printout
+.ipopt-log.txt
