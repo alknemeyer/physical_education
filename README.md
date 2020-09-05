@@ -76,6 +76,8 @@ robot = pe.system.System3D(
 robot.calc_eom(
     simp_func = lambda x: pe.utils.parsimp(x, nprocs=8),
 )
+# if you don't want to wait for simplification:
+# >>> robot.calc_eom()
 
 # create a pyomo model
 # we'll discretize the problem into 50 finite elements,
@@ -143,39 +145,85 @@ pe.utils.default_solver(
 robot.post_solve({'penalty': pen_cost})
 
 # animate the result at 1/3 speed, and view along the x-axis
-robot.animate(view_along='x', t_scale=3)
+# also, make the camera track the link named 'base'
+robot.animate(view_along='x', t_scale=3, track='base')
 
 # let's also view along an elevation of -120 degrees, and
 # an azimouth of 35 degrees
-robot.animate(view_along=(35, -120))
+robot.animate(view_along=(35, -120), track='base')
 ```
 
 ## Getting started
 
-1. Decide on a python implementation
+### 1. Decide on a python implementation
 
-   Larger models benefit tremendously from using [PyPy](https://www.pypy.org/) instead of [CPython](https://www.python.org/downloads/) as your python implementation. If you want more clarity on the differences, read [this explanation](https://stackoverflow.com/questions/17130975/python-vs-cpython#17130986). Anecdotally, PyPy is at least twice as fast when simplifying large models using sympy, and twenty times as fast when setting up models using pyomo. That's the difference of 30 seconds vs 10 minutes!
+Larger models benefit tremendously from using [PyPy](https://www.pypy.org/) instead of [CPython](https://www.python.org/downloads/) as your python implementation. If you want more clarity on the differences, read [this explanation](https://stackoverflow.com/questions/17130975/python-vs-cpython#17130986). Anecdotally, PyPy is at least twice as fast when simplifying large models using sympy, and twenty times as fast when setting up models using pyomo. That's the difference of 30 seconds vs 10 minutes!
 
-2. Install a nonlinear optimizer, like IPOPT
+### 2. Install a nonlinear optimizer, like IPOPT
 
-   ... which is at times much easier said than done. Instructions are [here](https://github.com/coin-or/Ipopt#getting-started). You'll also need to install a linear solver. The HSL solvers are the best for many tasks, and their multi-core MA86 solver in particular is very fast. There's [a page](http://www.hsl.rl.ac.uk/ipopt/) about HSL + Ipopt, which you should read. This step is usually far easier when done in a Unix environment, like [Ubuntu](https://ubuntu.com/) and others like it
+... which is at times much easier said than done. Instructions are [here](https://github.com/coin-or/Ipopt#getting-started). You'll also need to install a linear solver. The HSL solvers are the best for many tasks, and their multi-core MA86 solver in particular is very fast. There's [a page](http://www.hsl.rl.ac.uk/ipopt/) about HSL + Ipopt, which you should read. This step is usually far easier when done in a Unix environment, like [Ubuntu](https://ubuntu.com/) and others like it
 
-3. Install `physical_education`. It's recommended that you use a virtual environment - whether that's [conda](https://docs.conda.io/en/latest/), [venv](https://docs.python.org/3/tutorial/venv.html), [poetry](https://python-poetry.org/) or whatever else seems easiest to you. This library is on [pypi.org](https://pypi.org/project/physical_education/), so you should be able to pip install it as follows:
+### 3. Install `physical_education`
 
-   ```bash
-   python -m pip install physical_education
-   ```
+It's recommended that you use a virtual environment - whether that's [conda](https://docs.conda.io/en/latest/), [venv](https://docs.python.org/3/tutorial/venv.html), [poetry](https://python-poetry.org/) or whatever else seems easiest to you. This library is on [pypi.org](https://pypi.org/project/physical_education/), so you should be able to pip install it as follows:
 
-4. Optional, but highly recommended: install [jupyterlab](https://jupyterlab.readthedocs.io/)
+```bash
+python -m pip install physical_education
+```
 
-   Jupyterlab is the current version of the Jupyter IDE, which is used to view and run jupyter notebooks. Alex will shamelessly plug his [guide](https://alknemeyer.github.io/remote-notebooks/) on a good setup for this, if you have two computers: a laptop which you want to work on, and a beefy computer where you want optimizations to run
+IF you use conda, instructions are as follows:
 
-5. Look through examples, and then start your project. Good luck, and please raise an issue if anything is unclear
+* use pypy, as recommended, now that pypy [is available](https://conda-forge.org/blog/posts/2020-03-10-pypy/) via conda. In the code below, replace `ENV_NAME` with the name you want to use for your virtual environment:
+    ```bash
+    $ conda config --set channel_priority strict
+    $ conda create -n ENV_NAME pypy
+    $ conda activate ENV_NAME
+    $ pypy3 -m pip install physical_education
+    ```
+* or, using CPython:
+    ```bash
+    $ conda create --name ENV_NAME
+    $ conda activate ENV_NAME
+    $ conda install pip
+    $ python -m pip install physical_education
+    ```
+
+Docs on how to navigate environments can be found [here](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html).
+
+Test that it's working:
+
+```python
+$ python
+>>> import physical_education as pe
+>>> pe.visual.success('it worked!')
+```
+
+You can remove an environment using:
+
+```bash
+$ conda env remove --name ENV_NAME
+```
+
+That's mentioned in case you eg. try pypy, find it doesn't work, and then want to switch
+
+
+### 4. Optional but recommended: install [jupyterlab](https://jupyterlab.readthedocs.io/)
+
+Jupyterlab is the current version of the Jupyter IDE, which is used to view and run jupyter notebooks. Alex will shamelessly plug his [guide](https://alknemeyer.github.io/remote-notebooks/) on a good setup for this, if you have two computers: a laptop which you want to work on, and a beefy computer where you want optimizations to run
+
+### 5. Look through through the examples
+
+and then start your project. Good luck, and please raise an issue if anything is unclear
 
 
 ## Structure of the codebase
 ### `system.py`
+- hm, hm0, pyo_variables, sp_variables, eom
+
 ### `links.py`
+- q, dq, ddq
+- euler321 default
+
 ### Nodes
 ### Other useful functions
 
