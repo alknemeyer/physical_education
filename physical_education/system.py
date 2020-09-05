@@ -302,7 +302,7 @@ class System3D:
         # need to import this to get 3D plots working, for some reason
         from mpl_toolkits import mplot3d
         import matplotlib.animation
-        from matplotlib import pyplot as plt
+        import matplotlib.pyplot as plt
 
         assert self.m is not None, \
             'robot does not have a pyomo model defined on it'
@@ -417,7 +417,7 @@ class System3D:
         assert self.m is not None
         
         if utils.has_variable_timestep(self.m):
-            from matplotlib import pyplot as plt
+            import matplotlib.pyplot as plt
             plt.title('Timestep size vs finite element')
             data = 1000*utils.get_vals(self.m.hm) * self.m.hm0.value
             plt.plot(data)

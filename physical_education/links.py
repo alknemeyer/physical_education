@@ -404,7 +404,7 @@ class Link3D:
         dq = utils.get_vals(self.pyomo_vars['dq'], (q_set,))
         ddq = utils.get_vals(self.pyomo_vars['ddq'], (q_set,))
 
-        from matplotlib import pyplot as plt
+        import matplotlib.pyplot as plt
 
         def _plt(var, title: str):
             # plot using multiple axes, as in this SO link:

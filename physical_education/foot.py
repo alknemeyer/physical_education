@@ -331,7 +331,7 @@ class Foot3D:
         # foot_xy_vel = self.pyomo_vars['foot_xy_vel']
         # gamma = self.pyomo_vars['gamma']
 
-        from matplotlib import pyplot as plt
+        import matplotlib.pyplot as plt
 
         plt.plot(fe, contact_penalty,  label='contact')
         plt.plot(fe, friction_penalty, label='friction')

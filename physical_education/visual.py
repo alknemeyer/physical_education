@@ -166,7 +166,7 @@ def plot3d_setup(figsize=(10, 10),
 
     Returns a figure and axis
     """
-    from matplotlib import pyplot as plt
+    import matplotlib.pyplot as plt
 
     fig = plt.figure(figsize=figsize, dpi=dpi)
     ax = plt.gca(projection='3d')

@@ -39,7 +39,7 @@ def sin_around_touchdown(fe: int, nfe: int) -> np.ndarray:
     """Returns position, acceleration and velocity. The leg is assumed to be moving backwards
     at the time of impact with the ground, with a forward leg having a negative angle
 
-    >>> from matplotlib import pyplot as plt
+    >>> import matplotlib.pyplot as plt
     >>> for x, label in zip(sin_around_touchdown(10, 50), ('pos', 'vel', 'acc')):
     ...     plt.plot(x, label=label)
     >>> plt.gcf().set_size_inches(25,8); plt.grid(True); plt.legend(); plt.xticks(range(50)); plt.show()

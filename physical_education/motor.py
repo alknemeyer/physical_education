@@ -92,7 +92,7 @@ class _TorqueSpeedLimit:
             for fe in m.fe:
                 ω[fe-1, idx] = ω_f(data[fe-1])
 
-        from matplotlib import pyplot as plt
+        import matplotlib.pyplot as plt
         if _ax is None:
             _, ax = plt.subplots()
         else:
@@ -276,7 +276,7 @@ class Motor3D:
         pass
 
     def plot(self) -> None:
-        from matplotlib import pyplot as plt
+        import matplotlib.pyplot as plt
         try:
             Tc_set = self.pyomo_sets['Tc_set']
             Tc = utils.get_vals(self.pyomo_vars['Tc'], (Tc_set,))
