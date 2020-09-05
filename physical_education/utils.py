@@ -1,7 +1,7 @@
 from typing import Any, Iterable, Callable, Optional, Tuple, List, TypeVar, Union
 import sympy as sp
 import numpy as np
-from pyomo.environ import ConcreteModel, Var, Constraint
+from pyomo.environ import ConcreteModel, Var, Set, Param, RangeSet, Constraint
 from sympy import Matrix as Mat
 from .visual import info, debug, warn
 sp.init_printing()
@@ -250,7 +250,10 @@ def flatten(ls: Iterable[Iterable[T]]) -> List[T]:
 # interpolation ##############################################################
 
 
-def add_to_pyomo_model(m: ConcreteModel, prefix: str, vals: Iterable[Iterable]):
+PyomoThing = Union[Var, Set, Param, RangeSet]
+
+
+def add_to_pyomo_model(m: ConcreteModel, prefix: str, vals: Iterable[Iterable[PyomoThing]]):
     """
     Add the objects in `vals` to the pyomo model `m`, prefixed with `prefix`. Eg:
 
@@ -272,7 +275,7 @@ def add_to_pyomo_model(m: ConcreteModel, prefix: str, vals: Iterable[Iterable]):
     """
     from itertools import chain
     for v in chain(*vals):
-        newname = f'{prefix}_{v}'
+        newname = f'{prefix}_{v.name}'  # type: ignore
         assert not hasattr(m, newname), \
             f'The pyomo model already has an attribute with the name "{newname}"'
         setattr(m, newname, v)
@@ -382,7 +385,7 @@ def default_solver(*,
                    solver: str = 'ma86',
                    max_iter: int = 50_000,
                    OF_print_frequency_time: int = 10,
-                   output_file: str = '.delete-me.txt',  # prefix with '.' so it doesn't get synced
+                   output_file: str = './.ipopt-log.txt',
                    warm_start_init_point: bool = True,
                    **kwargs):
     """
@@ -519,3 +522,20 @@ class MarkovBinaryWalk():
 
     def walk(self, n):
         return np.array([self.step() for _ in range(n)], dtype=int)
+
+
+# https://stackoverflow.com/a/22424821/1892669
+def in_ipython() -> bool:
+    try:
+        from IPython import get_ipython
+        if 'IPKernelApp' not in get_ipython().config:  # type: ignore
+            return False
+    except ImportError:
+        return False
+    except AttributeError:
+        return False
+    return True
+
+
+def has_variable_timestep(m: ConcreteModel) -> bool:
+    return m.hm.type() == Var  # .ctype
