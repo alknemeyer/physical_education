@@ -5,9 +5,7 @@ from typing import Any, Dict, Iterable, Optional, List, cast
 from typing_extensions import TypedDict
 import sympy as sp
 import numpy as np
-from pyomo.environ import (
-    ConcreteModel, Set, Var, Constraint, Param,
-)
+import pyomo.environ as pyo
 from sympy import Matrix as Mat
 from . import utils, symdef, visual
 from .template import Node
@@ -164,40 +162,40 @@ class Link3D:
 
         return self
 
-    def add_vars_to_pyomo_model(self, m: ConcreteModel) -> None:
+    def add_vars_to_pyomo_model(self, m: pyo.ConcreteModel) -> None:
         for attr in ('mass', 'length', 'radius'):
             assert isinstance(getattr(self, attr), float),\
                 f'The {attr} for {self.name} must be set to a float'
 
         if self.is_base:
-            q_set = Set(initialize=('x', 'y', 'z', 'phi', 'theta',
+            q_set = pyo.Set(initialize=('x', 'y', 'z', 'phi', 'theta',
                                     'psi'), name='q_set', ordered=True)
         else:
-            q_set = Set(initialize=('phi', 'theta', 'psi'),
+            q_set = pyo.Set(initialize=('phi', 'theta', 'psi'),
                         name='q_set', ordered=True)
 
-        Fr_set = Set(initialize=range(len(self.constraint_forces)),
+        Fr_set = pyo.Set(initialize=range(len(self.constraint_forces)),
                      name='Fr_set', ordered=True)
 
-        q = Var(m.fe, m.cp, q_set, name='q', bounds=(-100, 100))
-        dq = Var(m.fe, m.cp, q_set, name='dq', bounds=(-1000, 1000))
+        q = pyo.Var(m.fe, m.cp, q_set, name='q', bounds=(-100, 100))
+        dq = pyo.Var(m.fe, m.cp, q_set, name='dq', bounds=(-1000, 1000))
         # the bounds are more or less arbitrary!
-        ddq = Var(m.fe, m.cp, q_set, name='ddq', bounds=(-5000, 5000))
+        ddq = pyo.Var(m.fe, m.cp, q_set, name='ddq', bounds=(-5000, 5000))
 
         # constraint (reaction) forces (multiples of BW)
-        Fr = Var(m.fe, m.cp, Fr_set, name='Fr', bounds=(-5, 5))
+        Fr = pyo.Var(m.fe, m.cp, Fr_set, name='Fr', bounds=(-5, 5))
 
-        mass = Param(initialize=self.mass, name='mass')
-        length = Param(initialize=self.length, name='length')
-        radius = Param(initialize=self.radius, name='radius')
+        mass = pyo.Param(initialize=self.mass, name='mass')
+        length = pyo.Param(initialize=self.length, name='length')
+        radius = pyo.Param(initialize=self.radius, name='radius')
 
-        self.pyomo_params: Dict[str, Param] = {
+        self.pyomo_params: Dict[str, pyo.Param] = {
             'mass': mass, 'length': length, 'radius': radius,
         }
-        self.pyomo_sets: Dict[str, Set] = {
+        self.pyomo_sets: Dict[str, pyo.Set] = {
             'q_set': q_set, 'Fr_set': Fr_set,
         }
-        self.pyomo_vars: Dict[str, Var] = {
+        self.pyomo_vars: Dict[str, pyo.Var] = {
             'q': q, 'dq': dq, 'ddq': ddq, 'Fr': Fr,
         }
 
@@ -231,9 +229,9 @@ class Link3D:
         collocation_func = get_collocation_func(collocation)
 
         setattr(m, self.name + '_collocation_q',
-                Constraint(m.fe, m.cp, q_set, rule=collocation_func(q,  dq)))
+                pyo.Constraint(m.fe, m.cp, q_set, rule=collocation_func(q,  dq)))
         setattr(m, self.name + '_collocation_dq',
-                Constraint(m.fe, m.cp, q_set, rule=collocation_func(dq, ddq)))
+                pyo.Constraint(m.fe, m.cp, q_set, rule=collocation_func(dq, ddq)))
 
         # while we're here, also make equations for the top and bottom of the link:
         self.top_I_func = utils.lambdify_EOM(self.top_I, sp_variables)
@@ -253,11 +251,14 @@ class Link3D:
 
         v = self.pyomo_vars
         p = self.pyomo_params
+        frset = self.pyomo_sets['Fr_set']
         return [
             *v['q'][fe, cp, :],
             *v['dq'][fe, cp, :],
             *v['ddq'][fe, cp, :],
-            *v['Fr'][fe, cp, :],
+            # using *v['Fr'][fe, cp, :] caused a bug in a newer pyomo version
+            # maybe switch back at some point?
+            *[v['Fr'][fe, cp, f] for f in frset],
             p['mass'], p['length'], p['radius'],
             *node_vars,
         ]
@@ -277,7 +278,7 @@ class Link3D:
             *node_vars,
         ]
 
-    def __getitem__(self, varname: str) -> Var:
+    def __getitem__(self, varname: str) -> pyo.Var:
         return self.pyomo_vars[varname]
 
     def save_data_to_dict(self) -> Dict[str, Any]:
@@ -513,7 +514,7 @@ class Link3D:
 #         return 'Prismatic' + Link3D.__repr__(self)
 
 
-def constrain_rel_angle(m: ConcreteModel, constr_name: str,
+def constrain_rel_angle(m: pyo.ConcreteModel, constr_name: str,
                         lowerbound: float, angle1: Iterable,
                         angle2: Iterable, upperbound: float):
     # TODO: maybe switch to something like:
@@ -530,7 +531,7 @@ def constrain_rel_angle(m: ConcreteModel, constr_name: str,
 
     # _fe and _cp are unused
     # TODO: switch to pyomo.environ.inequality!
-    def func(m: ConcreteModel, _fe, _cp, bound: str):
+    def func(m: pyo.ConcreteModel, _fe, _cp, bound: str):
         if bound == '+':
             ang1 = next(ang_1_up)
             ang2 = next(ang_2_up)
@@ -545,4 +546,4 @@ def constrain_rel_angle(m: ConcreteModel, constr_name: str,
             return lowerbound <= ang1 - ang2
 
     name = f'rel_angle_{constr_name}'
-    setattr(m, name, Constraint(m.fe, m.cp, ('+', '-'), rule=func))
+    setattr(m, name, pyo.Constraint(m.fe, m.cp, ('+', '-'), rule=func))
