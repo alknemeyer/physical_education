@@ -131,17 +131,16 @@ from pyomo.environ import Objective
 pen_cost = pe.foot.feet_penalty(robot)
 robot.m.cost = Objective(expr=1000*pen_cost)
 
-# solve!
-# this assumes you have IPOPT installed, along with
-# linear solver HSL MA86. Let's use L-BGFS, which is
-# _much_ faster for large models
+# solve! This assumes you have linear solver HSL MA86.
+# Let's use L-BGFS, which is _much_ faster for large models
+pe.utils.set_ipopt_path('~/CoinIpopt/build/bin/ipopt')
 pe.utils.default_solver(
-    max_mins=10, solver='ma86'
+    max_mins=10, solver='ma86',
     OF_hessian_approximation='limited-memory',
 ).solve(robot.m, tee=True)
 
 # check final penalty value, and so on
-robot.post_solve(costs)
+robot.post_solve({'penalty': pen_cost})
 
 # animate the result at 1/3 speed, and view along the x-axis
 robot.animate(view_along='x', t_scale=3)
@@ -161,7 +160,7 @@ robot.animate(view_along=(35, -120))
 
    ... which is at times much easier said than done. Instructions are [here](https://github.com/coin-or/Ipopt#getting-started). You'll also need to install a linear solver. The HSL solvers are the best for many tasks, and their multi-core MA86 solver in particular is very fast. There's [a page](http://www.hsl.rl.ac.uk/ipopt/) about HSL + Ipopt, which you should read. This step is usually far easier when done in a Unix environment, like [Ubuntu](https://ubuntu.com/) and others like it
 
-3. Install `physical_education`. It's recommended that you use a virtual environment - whether that's [conda](https://docs.conda.io/en/latest/), [venv](https://docs.python.org/3/tutorial/venv.html), [poetry](https://python-poetry.org/) or whatever else seems easiest to you
+3. Install `physical_education`. It's recommended that you use a virtual environment - whether that's [conda](https://docs.conda.io/en/latest/), [venv](https://docs.python.org/3/tutorial/venv.html), [poetry](https://python-poetry.org/) or whatever else seems easiest to you. This library is on [pypi.org](https://pypi.org/project/physical_education/), so you should be able to pip install it as follows:
 
    ```bash
    python -m pip install physical_education
