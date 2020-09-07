@@ -1,5 +1,5 @@
 # Publishing a new version
-Install [flint](https://flit.readthedocs.io/en/latest/), which makes publishing packages ridiculously easy. Next, increase the `__version__` number in [physical_education/__init__.py](physical_education/__init__.py). Then, tag the commit and publish:
+Install [flint](https://flit.readthedocs.io/en/latest/), which makes publishing packages ridiculously easy. Next, increase the `__version__` number in [physical_education/__init__.py](physical_education/__init__.py). Then, [tag](https://git-scm.com/book/en/v2/Git-Basics-Tagging) the commit and publish:
 
 ```bash
 $ git tag -a v0.0.1 -m "v0.0.1"
