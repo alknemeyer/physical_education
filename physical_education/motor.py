@@ -50,7 +50,6 @@ class _TorqueSpeedLimit:
         self.Tc_set = Tc_set
         self.pyo_variables = pyo_variables
 
-        visual.warn('Not sure if the equation is correct!', once=True)
         self.rel_angle_vels_f = utils.lambdify_EOM(
             self.relative_angle_velocities, sp_variables
         )
