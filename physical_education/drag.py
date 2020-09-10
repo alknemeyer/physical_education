@@ -117,7 +117,6 @@ class Drag3D:
         # magnitude of the drag force (a scalar) which is proportional to the velocity
         dx, dy, dz = self.dr
         if self.cylinder_top:
-            utils.warn('(1 - sp.sin(gamma))**2 has not been tested properly!')
             self.Fmag_rhs = self.coeff * \
                 (1 - sp.sin(gamma))**2 * (dx**2 + dy**2 + dz**2)
         else:
