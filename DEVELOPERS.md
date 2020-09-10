@@ -19,3 +19,6 @@ For example, prismatic links. Through some subclassing/refactoring, you may get 
 
 ## Add more node types
 For example, hard stop joints and springs between links
+
+## Switch to a different animation library
+`matplotlib` isn't great for animations - it's quite slow, not interactive, and so on. Switching to eg. `pyqtgraph` could be nice (and might not require that much work) but we'd need to make sure it works with a remote setup and across operating systems (ie not just linux)
