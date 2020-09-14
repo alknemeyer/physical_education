@@ -78,7 +78,8 @@ parameters = {
             'calf':  {'mass': 0.160*1.2, 'radius': 0.011, 'length': 0.287},
         },
         'friction_coeff': 1.3,
-        'motor_params': {'torque_bounds': (-3., 3.), 'no_load_speed': 100.},
+        'motor_params': {'torque_bounds': (-3., 3.), 'no_load_speed': 50.},
+        'tail_motor_params': {'torque_bounds': (-1., 1.), 'no_load_speed': 50.}
     },
 }
 
@@ -105,18 +106,19 @@ def model(params: Dict[str, Any]) -> Tuple[System3D, Callable[[System3D], None]]
                    **params['tail1'], meta=['tail'])
 
     # TODO: maybe rather friction = 0 ?
-    add_foot(tail1, at='bottom', nsides=8, friction_coeff=0.1)
+    add_foot(tail1, at='bottom', nsides=8, friction_coeff=0.1,
+             GRFxy_max = 0.1, GRFz_max = 0.1)
 
     body_B.add_hookes_joint(tail0, about='xy')
-    add_torque(body_B, tail0, about='xy', **params['motor_params'])
+    add_torque(body_B, tail0, about='xy', **params['tail_motor_params'])
 
     tail0.add_hookes_joint(tail1, about='xy')
-    add_torque(tail0, tail1, about='xy', **params['motor_params'])
+    add_torque(tail0, tail1, about='xy', **params['tail_motor_params'])
 
     add_drag(body_F, at=body_F.bottom_I, name='body_F-drag-head',
              use_dummy_vars=True, cylinder_top=True)
-    add_drag(body_F, at=body_F.Pb_I,
-             name='body_F-drag-body', use_dummy_vars=True)
+    add_drag(body_F, at=body_F.Pb_I, name='body_F-drag-body',
+             use_dummy_vars=True)
     add_drag(body_B, at=body_B.Pb_I, use_dummy_vars=True)
     add_drag(tail0, at=tail0.Pb_I, use_dummy_vars=True)
     add_drag(tail1, at=tail1.Pb_I, use_dummy_vars=True)

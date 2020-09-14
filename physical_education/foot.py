@@ -19,11 +19,16 @@ PlotConfig = TypedDict('PlotConfig', plot_forces=bool, force_scale=float)
 
 
 class Foot3D:
-    def __init__(self, name: str, Pb_I: Mat, nsides: int, friction_coeff: Optional[float] = None):
+    def __init__(self, name: str, Pb_I: Mat, nsides: int,
+                 GRFxy_max: float = 30.,
+                 GRFz_max: float = 30.,
+                 friction_coeff: Optional[float] = None):
         self.name = name
         self.nsides = nsides
         self.Pb_I = Pb_I
         self.friction_coeff = friction_coeff
+        self.GRFxy_max = GRFxy_max
+        self.GRFz_max = GRFz_max
 
         # the contact/friction stuff:
         self.D = friction_polygon(nsides)
@@ -52,8 +57,10 @@ class Foot3D:
         xy_set = Set(initialize=('x', 'y'), name='xy_set', ordered=True)
         fric_set = Set(initialize=range(8), name='fric_set', ordered=True)
 
-        GRFxy = Var(m.fe, m.cp, fric_set, name='GRFxy', bounds=(0, 30))
-        GRFz = Var(m.fe, m.cp,            name='GRFz',  bounds=(0, 30))
+        GRFxy = Var(m.fe, m.cp, fric_set, name='GRFxy',
+                    bounds=(0, self.GRFxy_max))
+        GRFz = Var(m.fe, m.cp, name='GRFz',
+                   bounds=(0, self.GRFz_max))
 
         # dummy vars equal to parts from EOM
         foot_height = Var(m.fe, m.cp, name='foot_height', bounds=(0, None))
