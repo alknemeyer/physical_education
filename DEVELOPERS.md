@@ -22,3 +22,8 @@ For example, hard stop joints and springs between links
 
 ## Switch to a different animation library
 `matplotlib` isn't great for animations - it's quite slow, not interactive, and so on. Switching to eg. `pyqtgraph` could be nice (and might not require that much work) but we'd need to make sure it works with a remote setup and across operating systems (ie not just linux)
+
+Other libraries for doing things in 3D include:
+   * https://github.com/K3D-tools/K3D-jupyter/tree/master
+   * https://github.com/rougier/matplotlib-3d
+   * https://matplotlib.org/matplotblog/posts/custom-3d-engine/
