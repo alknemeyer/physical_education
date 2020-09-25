@@ -163,6 +163,8 @@ Larger models benefit tremendously from using [PyPy](https://www.pypy.org/) inst
 
 ... which is at times much easier said than done. Instructions are [here](https://github.com/coin-or/Ipopt#getting-started). You'll also need to install a linear solver. The HSL solvers are the best for many tasks, and their multi-core MA86 solver in particular is very fast. There's [a page](http://www.hsl.rl.ac.uk/ipopt/) about HSL + Ipopt, which you should read. This step is usually far easier when done in a Unix environment, like [Ubuntu](https://ubuntu.com/) and others like it
 
+While you're waiting for things to compile/install, please read this article on [supporting black scholars in robotics](https://spectrum.ieee.org/automaton/at-work/education/supporting-black-scholars-in-robotics). All fields (even technical ones, like robotics) are political, and it's crucial that you make an active effort to learn about and combat injustices, such as racism and sexism.
+
 ### 3. Install `physical_education`
 
 It's recommended that you use a virtual environment - whether that's [conda](https://docs.conda.io/en/latest/), [venv](https://docs.python.org/3/tutorial/venv.html), [poetry](https://python-poetry.org/) or whatever else seems easiest to you. This library is on [pypi.org](https://pypi.org/project/physical_education/), so you should be able to pip install it as follows:
