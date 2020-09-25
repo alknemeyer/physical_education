@@ -448,6 +448,10 @@ def friction_polygon(nsides: int) -> np.ndarray:
 
 def interactively_set_timings(feet: Iterable[str], nfe: int, wait_until_all_set: bool = False, **kwargs) -> List:
     """
+    Before using this, you'll likely need to enable `@jupyter-widgets/jupyterlab-manager`
+    as a jupyterlab extension. See eg:
+    https://stackoverflow.com/questions/36351109/ipython-notebook-ipywidgets-does-not-show
+    
     >>> interactively_set_timings([link.foot.name for link in robot.links if link.has_foot()], nfe=50, time=0.35)
     """
     funcs = []
@@ -465,7 +469,8 @@ def interactively_set_timings(feet: Iterable[str], nfe: int, wait_until_all_set:
 
 
 def set_timing(nfe: int, *, time: Optional[float] = None, initial: Optional[Tuple] = None,
-               description: str = 'Foot timing', width: str = '500px', when_done: str = 'disable') -> Callable[[], Dict[str, Union[bool, Tuple[int, int]]]]:
+               description: str = 'Foot timing', width: str = '500px', when_done: str = 'disable'
+               ) -> Callable[[], Dict[str, Union[bool, Tuple[int, int]]]]:
     """
     A simple example:
     >>> f = get_foot_timing(nfe=20, time=0.35)
