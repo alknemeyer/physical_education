@@ -244,7 +244,10 @@ def track_pt(ax, pt: Union[Tuple[float, float], Tuple[float, float, float]], lim
         ax.set_zlim(pt[2]-lim, pt[2]+lim)
 
 
-def get_limsx(link, dy: float = 2., z: float = 2) -> Tuple[Tuple, Tuple, Tuple]:
+Bounds = Tuple[float, float]
+
+
+def get_limsx(link, dy: float = 2., z: float = 2) -> Tuple[Bounds, Bounds, Bounds]:
     """Get limits for a movement along the positive `x`-axis. Use like,
     >>> robot.animate(lims=get_lims(robot.links[0],dy=4),
                       view_along=(35, -120),
@@ -256,7 +259,7 @@ def get_limsx(link, dy: float = 2., z: float = 2) -> Tuple[Tuple, Tuple, Tuple]:
     return ((0, xlim), (-dy/2, dy/2), (0, z))
 
 
-def get_limsy(link, dx: float = 2., z: float = 2) -> Tuple[Tuple, Tuple, Tuple]:
+def get_limsy(link, dx: float = 2., z: float = 2) -> Tuple[Bounds, Bounds, Bounds]:
     """Get limits for a movement along the positive `y`-axis. Use like,
     >>> robot.animate(lims=get_lims(robot.links[0],dx=4),
                       view_along=(35, -120),
@@ -268,7 +271,7 @@ def get_limsy(link, dx: float = 2., z: float = 2) -> Tuple[Tuple, Tuple, Tuple]:
     return ((-dx/2, dx/2), (0, ylim), (0, z))
 
 
-def get_limsxy(link, z: float = 2) -> Tuple[Tuple, Tuple, Tuple]:
+def get_limsxy(link, z: float = 2) -> Tuple[Bounds, Bounds, Bounds]:
     from .utils import get_vals
     xdata = get_vals(link['q'], (link.pyomo_sets['q_set'],))[:, 0, 0]
     xlims = (min(xdata) - 1, max(xdata) + 1)
