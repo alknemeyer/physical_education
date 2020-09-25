@@ -28,7 +28,7 @@ class bcolors:
 
 # fix for windows (based on stackoverflow link above). Haven't tested it myself
 if os.name == 'nt':
-    os.system('color')
+    os.system('color')  # type: ignore
 
 
 @contextmanager
