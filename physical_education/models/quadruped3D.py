@@ -1,5 +1,6 @@
-from typing import Any, Dict, Iterable, Optional, Tuple, Callable
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Callable
 from math import pi as π
+import numpy as np
 from sympy import Matrix as Mat
 from ..links import Link3D, constrain_rel_angle
 from ..system import System3D
@@ -107,7 +108,7 @@ def model(params: Dict[str, Any]) -> Tuple[System3D, Callable[[System3D], None]]
 
     # TODO: maybe rather friction = 0 ?
     add_foot(tail1, at='bottom', nsides=8, friction_coeff=0.1,
-             GRFxy_max = 0.1, GRFz_max = 0.1)
+             GRFxy_max=0.1, GRFz_max=0.1)
 
     body_B.add_hookes_joint(tail0, about='xy')
     add_torque(body_B, tail0, about='xy', **params['tail_motor_params'])
@@ -378,9 +379,11 @@ def periodic_gallop_test(robot,
         def rand(mu, sigma, offset=0):
             return radians(random.gauss(mu, sigma)+offset)
 
-        for fe, cp in robot.indices(one_based=True):  # body
+        for fe, cp in robot.indices(one_based=True):
+            # body
             robot.links[0]['q'][fe, cp, 'theta'].value = rand(0, 15)
             robot.links[1]['q'][fe, cp, 'theta'].value = rand(0, 15, +10)
+            # tail
             robot.links[2]['q'][fe, cp, 'theta'].value = rand(0, 15, -10)
             robot.links[3]['q'][fe, cp, 'theta'].value = rand(0, 15, -10)
 
@@ -424,22 +427,22 @@ def periodic_gallop_test(robot,
     for link in robot.links:
         for fe, cp in robot.indices(one_based=True):
             phi = link['q'][fe, cp, 'phi']
-            phi.setub(radians(15))
+            phi.setub(radians(+15))
             phi.setlb(radians(-15))
 
             psi = link['q'][fe, cp, 'psi']
-            psi.setub(radians(10 + (at_angle_d or 0)))
+            psi.setub(radians(+10 + (at_angle_d or 0)))
             psi.setlb(radians(-10 + (at_angle_d or 0)))
 
     # bound theta
     for link in robot.links[:2]:  # body
         for fe, cp in robot.indices(one_based=True):
-            link['q'][fe, cp, 'theta'].setub(radians(60))
+            link['q'][fe, cp, 'theta'].setub(radians(+60))
             link['q'][fe, cp, 'theta'].setlb(radians(-60))
 
     for link in robot.links[2:]:  # everything else
         for fe, cp in robot.indices(one_based=True):
-            link['q'][fe, cp, 'theta'].setub(radians(90))
+            link['q'][fe, cp, 'theta'].setub(radians(+90))
             link['q'][fe, cp, 'theta'].setlb(radians(-90))
 
     # never fallen over
@@ -516,3 +519,84 @@ def periodic_gallop_test(robot,
 #         set_lims(name, 1., 75.)
 #     for name in ("UBL_LBL_torque", "UBR_LBR_torque"):
 #         set_lims(name, 0.75, 50.)
+
+def theoretical_peak_power(*,
+                           mass: float,
+                           pct_mass_for_actuation: float = 0.5,
+                           watts_per_kg: float = 600.,
+                           disp: bool = True):
+    """
+    >>> theoretical_peak_power(mass=sum(link.mass for link in robot.links))
+    """
+    peak_power = mass*pct_mass_for_actuation*watts_per_kg
+
+    if disp:
+        print(f'Expected total power of a {mass:.2f} kg cheetah with '
+              f'{100*pct_mass_for_actuation:.2f}% of mass for actuation '
+              f'and {watts_per_kg:.2f} W/kg: mass*actuation*watts_per_kg = '
+              f'{int(peak_power)} W')
+
+    return peak_power
+
+
+def theoretical_peak_angle_velocity(stride_freq_Hz: float = 3.,
+                                    total_angle_deg: float = 180.,
+                                    disp: bool = True):
+    """Cheetah leg moves from 0⁰ -> 90⁰ -> 0⁰ in about 1/3 of a second. Ie, follows the shape:
+         position(t) = 90/2 * sin(radians(t/0.3 * 360))
+    where t = 0..0.3
+
+    Differentiating with respect to time:
+        velocity(t) = 90/2 * cos(radians(t/0.3 * 360)) * 360/0.3
+    Giving a max velocity of
+        velocity(0) -> 90/2 * 360/0.3 = 
+
+    Example code:
+
+    ```python
+        from math import pi as π
+        total_angle_deg = 180.
+        stride_freq_Hz = 3.
+
+        t = np.linspace(0, 1/stride_freq_Hz)
+        pos = lambda t: total_angle_deg/2 * np.sin(t*stride_freq_Hz * 2*π)
+        plt.plot(t, 10*pos(t), label='position [deg] scaled by 10')
+
+        vel = lambda t: total_angle_deg/2 * np.cos(t*stride_freq_Hz * 2*π) * stride_freq_Hz * 2*π
+        plt.plot(t, vel(t), label='velocity [deg]')
+
+        max_ω_deg = total_angle_deg/2 * stride_freq_Hz * 2*π
+        plt.title(f'total angle change = {total_angle_deg} deg\nmax angular velocity = {max_ω_deg:.1f} deg/s = {np.radians(max_ω_deg):.1f} rad/s')
+        plt.legend(); plt.show()
+    ```
+    """
+    from math import pi as π, radians
+    peak = total_angle_deg/2 * stride_freq_Hz * 2*π
+
+    if disp:
+        print(f'Expected peak angular velocity of a leg moving though '
+              f'{total_angle_deg} degrees at {stride_freq_Hz} Hz:\n'
+              f'total_angle_deg/2 * stride_freq_Hz * 2*π '
+              f'= {peak:.2f} deg/s = {radians(peak):.2f} rad/s')
+
+    return peak
+
+
+# def plot_power_values(robot: System3D, power_arr: List[np.ndarray]):
+#     import matplotlib.pyplot as plt
+
+#     peaks = np.sum(
+#         np.hstack(power_arr),
+#         axis=1
+#     )
+
+#     total_time = sum(
+#         robot.m.hm[fe].value for fe in robot.m.fe if fe != 1)*robot.m.hm0.value
+#     nfe = len(robot.m.fe)
+
+#     plt.plot(np.linspace(0, total_time, num=nfe), peaks)
+#     plt.title(
+#         f'Total power output of cheetah.\nPeak power: {int(np.max(peaks))} W')
+#     plt.ylabel('Total power [W]')
+#     plt.xlabel('time [s]')
+#     plt.show()
