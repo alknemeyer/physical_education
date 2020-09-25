@@ -183,7 +183,7 @@ class Link3D:
         ddq = pyo.Var(m.fe, m.cp, q_set, name='ddq', bounds=(-5000, 5000))
 
         # constraint (reaction) forces (multiples of BW)
-        Fr = pyo.Var(m.fe, m.cp, Fr_set, name='Fr', bounds=(-5, 5))
+        Fr = pyo.Var(m.fe, m.cp, Fr_set, name='Fr', bounds=(-10, 10))
 
         mass = pyo.Param(initialize=self.mass, name='mass')
         length = pyo.Param(initialize=self.length, name='length')
