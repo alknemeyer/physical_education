@@ -217,10 +217,13 @@ Jupyterlab is the current version of the Jupyter IDE, which is used to view and 
 
 ### 5. Look through through the examples
 
-and then start your project. Good luck, and please raise an issue if anything is unclear
+and then start your project. Good luck, and please open an issue if anything is unclear!
 
 
-## Structure of the codebase
+## Documentation
+outside of commented code/examples, is currently non-existant. I'm finishing off my dissertation now, but will work on that afterwards
+
+<!-- ## Structure of the codebase
 ### `system.py`
 - hm, hm0, pyo_variables, sp_variables, eom
 
@@ -237,4 +240,4 @@ and then start your project. Good luck, and please raise an issue if anything is
 ### matplotlib
 ### dill
 ### types
-#### stub files
+#### stub files -->
