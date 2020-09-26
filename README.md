@@ -10,13 +10,13 @@ It's for research into legged critters
 
 Let's model a monoped hopper, shown in the left on this diagram:
 
-![Monoped and quadruped](monoped-and-quadruped.png)
+![Diagram of monoped and quadruped](monoped-and-quadruped.png)
 
 (The complicated quadruped model on the right is where this library starts to shine)
 
 We'll use a rotary joint for the hip (connection between upper link and body) and Hooke's joint for the knee (connection between upper link and lower link), shown in the following diagram:
 
-![Rotary and Hooke's joints](joint-types.png)
+![Diagram of Rotary and Hooke's joints](joint-types.png)
 
 On to the code:
 
