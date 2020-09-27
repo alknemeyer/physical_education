@@ -6,7 +6,7 @@ Install [flint](https://flit.readthedocs.io/en/latest/), which makes publishing 
 $ git tag -a v0.0.1 -m "release v0.0.1"
 # push local tag to remote repo
 $ git push origin v0.0.1
-$ flit publish
+$ flint publish
 ```
 
 # Development ideas
