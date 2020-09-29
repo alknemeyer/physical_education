@@ -1,11 +1,12 @@
 # Publishing a new version
-Install [flint](https://flit.readthedocs.io/en/latest/), which makes publishing packages ridiculously easy. Next, increase the `__version__` number in [physical_education/__init__.py](physical_education/__init__.py). Then, create a (local) [tag](https://git-scm.com/book/en/v2/Git-Basics-Tagging) the commit and publish:
+Install [flit](https://flit.readthedocs.io/en/latest/), which makes publishing packages ridiculously easy. Next, increase the `__version__` number in [physical_education/__init__.py](physical_education/__init__.py). Then, create a (local) [tag](https://git-scm.com/book/en/v2/Git-Basics-Tagging) the commit and publish:
 
 ```bash
 # make a local tag with message "release v0.0.1"
 $ git tag -a v0.0.1 -m "release v0.0.1"
 # push local tag to remote repo
 $ git push origin v0.0.1
+# generate files into dist/ and upload them to pypi
 $ flit publish
 ```
 
