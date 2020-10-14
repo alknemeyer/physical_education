@@ -28,7 +28,7 @@ class Node(Protocol):
         Also, add `assert` statements for common errors
         """
 
-    def calc_eom(self, q, dq, ddq) -> Mat:
+    def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
         """
         Calculate the Q input mapping defined by this component,
         and return it
@@ -127,11 +127,14 @@ class Node(Protocol):
         Delete plot objects defined in `animation_setup`. Useful when jupyter
         causes handles to plot objects to remain, causing issues with python's
         garbage collector and matplotlib
-        """
+
+        ```python
         try:
             del self.line
         except:
             pass
+        ```
+        """
 
     def plot(self):
         """
