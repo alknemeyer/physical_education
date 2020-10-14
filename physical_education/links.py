@@ -168,14 +168,14 @@ class Link3D:
                 f'The {attr} for {self.name} must be set to a float'
 
         if self.is_base:
-            q_set = pyo.Set(initialize=('x', 'y', 'z', 'phi', 'theta',
-                                    'psi'), name='q_set', ordered=True)
+            q_set = pyo.Set(initialize=('x', 'y', 'z', 'phi', 'theta', 'psi'),
+                            name='q_set', ordered=True)
         else:
             q_set = pyo.Set(initialize=('phi', 'theta', 'psi'),
-                        name='q_set', ordered=True)
+                            name='q_set', ordered=True)
 
         Fr_set = pyo.Set(initialize=range(len(self.constraint_forces)),
-                     name='Fr_set', ordered=True)
+                         name='Fr_set', ordered=True)
 
         q = pyo.Var(m.fe, m.cp, q_set, name='q', bounds=(-100, 100))
         dq = pyo.Var(m.fe, m.cp, q_set, name='dq', bounds=(-1000, 1000))
@@ -234,8 +234,8 @@ class Link3D:
                 pyo.Constraint(m.fe, m.cp, q_set, rule=collocation_func(dq, ddq)))
 
         # while we're here, also make equations for the top and bottom of the link:
-        self.top_I_func = utils.lambdify_EOM(self.top_I, sp_variables)
-        self.bottom_I_func = utils.lambdify_EOM(self.bottom_I, sp_variables)
+        self.lineanimation = visual.LineAnimation(
+            self.top_I, self.bottom_I, sp_variables)
 
         for node in self.nodes.values():
             node.add_equations_to_pyomo_model(
@@ -351,15 +351,11 @@ class Link3D:
         return self
 
     def animation_setup(self, fig, ax, data: List[List[float]]):
-        self.line = ax.plot([], [], [],
-                            linewidth=self._plot_config['linewidth'],
-                            color=self._plot_config['color'])[0]
+        self.lineanimation.animation_setup(fig, ax, data)
 
-        self.plot_data = [np.empty((len(data), 3)),
-                          np.empty((len(data), 3))]
-        for idx, d in enumerate(data):  # xyz of top and bottom of the link
-            self.plot_data[0][idx, :] = [f(d) for f in self.top_I_func]
-            self.plot_data[1][idx, :] = [f(d) for f in self.bottom_I_func]
+        line = self.lineanimation.line
+        line.set_linewidth(self._plot_config['linewidth'])
+        line.set_color(self._plot_config['color'])
 
         for node in self.nodes.values():
             node.animation_setup(fig, ax, data)
@@ -367,34 +363,16 @@ class Link3D:
     def animation_update(self, fig, ax, fe: Optional[int] = None,
                          t: Optional[float] = None, t_arr: Optional[np.ndarray] = None,
                          track: bool = False):
-        if fe is not None:
-            top_xyz = self.plot_data[0][fe-1]
-            bottom_xyz = self.plot_data[1][fe-1]
-        else:
-            top_xyz = [np.interp(t, t_arr, self.plot_data[0][:, i])
-                       for i in range(3)]
-            bottom_xyz = [np.interp(t, t_arr, self.plot_data[1][:, i])
-                          for i in range(3)]
-
-        visual.update_3d_line(self.line, top_xyz, bottom_xyz)
-
-        if track is True:
-            lim = 1.0
-            if top_xyz[2] < lim:
-                top_xyz = (float(top_xyz[0]), float(top_xyz[1]), lim)
-            visual.track_pt(ax, top_xyz, lim=lim)  # type: ignore
+        self.lineanimation.animation_update(fig, ax, fe, t, t_arr, track)
 
         for node in self.nodes.values():
             node.animation_update(fig, ax, fe=fe, t=t, t_arr=t_arr)
 
     def cleanup_animation(self, fig, ax):
-        try:
-            del self.line
-        except:
-            pass
-        finally:
-            for node in self.nodes.values():
-                node.cleanup_animation(fig, ax)
+        self.lineanimation.cleanup_animation(fig, ax)
+
+        for node in self.nodes.values():
+            node.cleanup_animation(fig, ax)
 
     def plot(self) -> None:
         m = self.pyomo_vars['q'].model()
@@ -466,52 +444,6 @@ class Link3D:
         nodes = ',\n    '.join(str(node) for node in self.nodes.values())
         nodes = f', nodes=[\n    {nodes}]' if len(nodes) > 0 else ''
         return f'Link3D(name="{self.name}", isbase={self.is_base}, mass={self.mass}kg, length={self.length}m, radius={self.radius}m{nodes})'
-
-
-# class PrismaticLink3D(Link3D):
-#     def __init__(self, name: str, aligned_along: str, *, bounds: Tuple[float, float], **kwargs):
-#         utils.warn(
-#             'Prismatic hasnt been tested yet! Remove this message if all seems okay!')
-
-#         assert 'length' in kwargs.keys()
-
-#         self.bounds = bounds
-#         self.Δlength = sp.Symbol(f'\\Delta\\ L_{name}')
-#         self.dΔlength = sp.Symbol(r'\dot{\Delta\ L_{%s}}' % name)
-#         self.ddΔlength = sp.Symbol(r'\ddot{\Delta\\ L_{%s}}' % name)
-#         length = self.Δlength + kwargs.pop('length')
-#         Link3D.__init__(self, name, aligned_along, **kwargs, length=length)
-
-#         self.q = sp.Matrix([*self.q,   self.Δlength])
-#         self.dq = sp.Matrix([*self.dq,  self.dΔlength])
-#         self.ddq = sp.Matrix([*self.ddq, self.ddΔlength])
-
-#     def add_vars_to_pyomo_model(self, m: ConcreteModel) -> None:
-#         # NOTE: copied from Link3D above, but with the addition of 'ΔL' in q_set. No other differences
-#         raise NotImplementedError('Update this to keep in sync with Link3D!!')
-
-#         if self.is_base:
-#             q_set = Set(initialize=('x', 'y', 'z', 'phi', 'theta',
-#                                     'psi', 'ΔL'), name='q_set', ordered=True)
-#         else:
-#             q_set = Set(initialize=('phi', 'theta', 'psi', 'ΔL'),
-#                         name='q_set', ordered=True)
-
-#         for fe in m.fe:
-#             for cp in m.cp:
-#                 q[fe, cp, 'ΔL'].setlb(self.bounds[0])
-#                 q[fe, cp, 'ΔL'].setub(self.bounds[1])
-#                 if self.is_base:
-#                     q[fe, cp, 'z'].setlb(0)
-
-#     # def get_pyomo_vars(self, fe: int, cp: int) -> List:
-#         # return Link3D.get_pyomo_vars(self, fe, cp) + [self.pyomo_vars['ΔL'][fe,cp]]
-
-#     # def get_sympy_vars(self) -> List[sp.Symbol]:
-#     #     return Link3D.get_sympy_vars(self) + [self.Δlength, self.dΔlength, self.ddΔlength]
-
-#     def __repr__(self) -> str:
-#         return 'Prismatic' + Link3D.__repr__(self)
 
 
 def constrain_rel_angle(m: pyo.ConcreteModel, constr_name: str,

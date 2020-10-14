@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import os
 import inspect
 import numpy as np
+import sympy as sp
 
 
 # printing
@@ -278,3 +279,54 @@ def get_limsxy(link, z: float = 2) -> Tuple[Bounds, Bounds, Bounds]:
     ydata = get_vals(link['q'], (link.pyomo_sets['q_set'],))[:, 0, 1]
     ylims = (min(ydata) - 1, max(ydata) + 1)
     return (xlims, ylims, (0, z))
+
+
+class LineAnimation:
+    def __init__(self, pos1: sp.Matrix, pos2: sp.Matrix,
+                 sp_variables: List[sp.Symbol]) -> None:
+        assert pos1.shape == (3, 1)
+        assert pos2.shape == (3, 1)
+
+        from .utils import lambdify_EOM
+        self.pos1func = lambdify_EOM(pos1, sp_variables)
+        self.pos2func = lambdify_EOM(pos2, sp_variables)
+    
+    def animation_setup(self, fig, ax, data: List[List[float]]):
+        self.line = ax.plot([], [], [],
+                            linewidth=1,
+                            color='darkgray')[0]
+
+        self.plot_data = [np.empty((len(data), 3)),
+                          np.empty((len(data), 3))]
+        
+        for idx, d in enumerate(data):  # xyz of top and bottom of the link
+            self.plot_data[0][idx, :] = [f(d) for f in self.pos1func]
+            self.plot_data[1][idx, :] = [f(d) for f in self.pos2func]
+    
+    def animation_update(self, fig, ax,
+                         fe: Optional[int] = None,
+                         t: Optional[float] = None,
+                         t_arr: Optional['np.ndarray'] = None,
+                         track: bool = False):
+        if fe is not None:
+            pos1_xyz = self.plot_data[0][fe-1]
+            pos2_xyz = self.plot_data[1][fe-1]
+        else:
+            pos1_xyz = [np.interp(t, t_arr, self.plot_data[0][:, i])
+                       for i in range(3)]
+            pos2_xyz = [np.interp(t, t_arr, self.plot_data[1][:, i])
+                          for i in range(3)]
+        
+        update_3d_line(self.line, pos1_xyz, pos2_xyz)
+
+        if track is True:
+            lim = 1.0
+            if pos1_xyz[2] < lim:
+                pos1_xyz = (float(pos1_xyz[0]), float(pos1_xyz[1]), lim)
+            visual.track_pt(ax, pos1_xyz, lim=lim)  # type: ignore
+
+    def cleanup_animation(self, fig, ax):
+        try:
+            del self.line
+        except:
+            pass
