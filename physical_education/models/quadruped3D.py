@@ -66,8 +66,8 @@ parameters = {
         NOTE: the motor_params values are mostly made up. In any case, different muscle
               groups would need different values
         """,
-        'body_B': {'mass': 28., 'radius': 0.594/(2*π), 'length': 0.5},
-        'body_F': {'mass': 14., 'radius': 0.717/(2*π), 'length': 0.3},
+        'body_B': {'mass': 28., 'radius': 0.594/(2*π), 'length': 0.3},
+        'body_F': {'mass': 14., 'radius': 0.717/(2*π), 'length': 0.5},
         'tail0': {'mass': 0.4, 'radius': 0.0255, 'length': 0.38},
         'tail1': {'mass': 0.2, 'radius': 0.0255, 'length': 0.38},
         'front': {
