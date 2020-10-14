@@ -1,15 +1,15 @@
 """
-Running optim_lib as main currently doesn't do anything, but it could be useful
+Running physical_education as main currently doesn't do anything, but it could be useful
 to set up as some easy way of running experiments in parallel? Eg. something like,
 
-    $ python -m optim_lib setup_file.py --parallel-solves 4 --output-dir logs/ --until-successfull-solves 100 --save-model
+    $ python -m physical_education setup_file.py --parallel-solves 4 --output-dir logs/ --until-successfull-solves 100 --save-model
 
 which would expect a certain file structure in setup_file.py, solving 4 problems at a time until
 there are 100 successfull solves, each time saving the model and IPOPT logs to logs/
 
 setup_file.py might look like,
 ```
-import optim_lib
+import physical_education as pe
 # other imports...
 
 def get_model() -> System3D:

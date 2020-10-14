@@ -44,7 +44,7 @@ def no_colour_output():
 
 def get_useful_info(f: FrameType) -> str:
     # s is something like:
-    # <code object remove_constraint_if_exists at 0x000000000aeeb100, file "/home/alex/alknemeyer-msc/python/optim_lib/utils.py", line 301>
+    # <code object remove_constraint_if_exists at 0x000000000aeeb100, file "/home/alex/alknemeyer-msc/python/physical_education/visual.py", line 301>
     s = str(f.f_back.f_back.f_code)
 
     # the indexing removes the leading '<code object' and trailing '>'
@@ -56,9 +56,9 @@ def get_useful_info(f: FrameType) -> str:
     # indexing removes the comma at the end + surrounding quotes (regardless of if their single or double)
     filepath = ''.join(middle)[1:-2].rstrip('.py').lstrip('<').rstrip('>')
 
-    if 'optim_lib' in filepath:
-        # eg: '/home/alex/alknemeyer-msc/python/optim_lib/utils'
-        filepath = filepath[filepath.index('optim_lib'):].replace('/', '.')
+    if 'physical_education' in filepath:
+        # eg: '/home/alex/alknemeyer-msc/python/physical_education/visual'
+        filepath = filepath[filepath.index('physical_education'):].replace('/', '.')
     elif 'ipython' in filepath:
         # eg: 'ipython-input-34-ce5fcbaca0c1'
         filepath = filepath[:filepath.rfind('-')]
@@ -323,7 +323,7 @@ class LineAnimation:
             lim = 1.0
             if pos1_xyz[2] < lim:
                 pos1_xyz = (float(pos1_xyz[0]), float(pos1_xyz[1]), lim)
-            visual.track_pt(ax, pos1_xyz, lim=lim)  # type: ignore
+            track_pt(ax, pos1_xyz, lim=lim)  # type: ignore
 
     def cleanup_animation(self, fig, ax):
         try:

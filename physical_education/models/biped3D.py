@@ -2,13 +2,13 @@
     Number of operations in EOM without simplification: 186 903. With utils.parsimp: 
 
     Example usage:
-    >>> import optim_lib; utils = optim_lib.utils
-    >>> robot, add_pyomo_constraints = optim_lib.models.biped3D()
+    >>> import physical_education as pe
+    >>> robot, add_pyomo_constraints = pe.models.biped3D()
     >>> robot.calc_eom(simp_func = lambda x: utils.parsimp(x, nprocs=12))
     >>> robot.make_pyomo_model(nfe=30, collocation='euler', total_time=0.7, vary_timestep_within=(0.8, 1.2))
     >>> add_pyomo_constraints(robot)
-    >>> costs = optim_lib.models.tasks.drop_test(robot, z_rot=0.2, min_torque=False, initial_height=1.0)
-    >>> utils.default_solver(max_mins=10, solver='ma86', OF_hessian_approximation='limited-memory').solve(robot.m, tee=True)
+    >>> costs = pe.models.tasks.drop_test(robot, z_rot=0.2, min_torque=False, initial_height=1.0)
+    >>> oe.utils.default_solver(max_mins=10, solver='ma86', OF_hessian_approximation='limited-memory').solve(robot.m, tee=True)
     >>> robot.post_solve(costs)
     >>> robot.animate(view_along=(35, -120), t_scale=2, track='base')
 """

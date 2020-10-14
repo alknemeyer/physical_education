@@ -1,7 +1,7 @@
 """
     Usage is along the lines of:
     ```
-    >>> from optim_lib.collocation import radau_3
+    >>> from physical_education.collocation import radau_3
     >>> m.interp_q  = Constraint(m.fe, m.cp, m.vars, rule=radau_3(m.q,  m.dq))
     >>> m.interp_dq = Constraint(m.fe, m.cp, m.vars, rule=radau_3(m.dq, m.ddq))
     ```
