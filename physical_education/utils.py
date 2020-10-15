@@ -133,6 +133,14 @@ def calc_velocities_and_energies(
     return Ek, Ep, dPs, ang_vels
 
 
+def norm(vec: Mat, eps: float):
+    assert vec.shape == (3, 1)
+    assert eps >= 0
+
+    x, y, z = vec
+    return sp.sqrt(x**2 + y**2 + z**2 + eps)
+
+
 def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
                  display_vars: bool = False, test_func: bool = True,
                  func_map: dict = {}) -> List[Callable[..., float]]:

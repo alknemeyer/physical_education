@@ -12,17 +12,19 @@ where `angle` is the angle between the norm of the area of the object and the ve
 Source: https://en.wikipedia.org/wiki/Drag_equation
 """
 from typing import Union
-from .links import Link3D
-from .system import System3D
 import sympy as sp
 import numpy as np
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
 from typing_extensions import TypedDict
-from . import utils
 from pyomo.environ import (
     ConcreteModel, Param, Set, Var, Constraint,
 )
 from sympy import Matrix as Mat
+
+from .links import Link3D
+from .system import System3D
+from .utils import norm
+from . import utils
 
 if TYPE_CHECKING:
     from .variable_list import VariableList
@@ -53,19 +55,11 @@ def cylinder_in_air(A: float, *, Cd: float = 1.1, rho: float = DENSITY_OF_AIR) -
     return 1/2 * Cd * rho * A
 
 
-def _norm(vec: Mat, eps: float):
-    assert vec.shape == (3, 1)
-    assert eps >= 0
-
-    x, y, z = vec
-    return sp.sqrt(x**2 + y**2 + z**2 + eps)
-
-
 def _angle_between(veca: Mat, vecb: Mat, eps: float):
     assert veca.shape == vecb.shape == (3, 1)
 
     return sp.acos(
-        veca.dot(vecb) / _norm(veca, eps) / _norm(vecb, eps)
+        veca.dot(vecb) / norm(veca, eps) / norm(vecb, eps)
     )
 
 
@@ -124,7 +118,7 @@ class Drag3D:
                 sp.sin(gamma)**2 * (dx**2 + dy**2 + dz**2)
 
         # drag force (a vector) opposite to the velocity of the link
-        self.f = - self.Fmag * self.dr / _norm(self.dr, eps=1e-6)
+        self.f = - self.Fmag * self.dr / norm(self.dr, eps=1e-6)
 
         # then, project the force onto the plane defined by the norm of the area
         # n = self.area_norm
