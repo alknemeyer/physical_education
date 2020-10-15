@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Callable
+from typing import Any, Dict, Iterable, Optional, Tuple, Callable
 from math import pi as π
 import numpy as np
 from sympy import Matrix as Mat
@@ -7,6 +7,7 @@ from ..system import System3D
 from ..foot import add_foot
 from ..motor import add_torque
 from ..drag import add_drag
+from ..spring import add_torquespring
 
 
 parameters = {
@@ -342,7 +343,7 @@ def periodic_gallop_test(robot,
     from ..foot import prescribe_contact_order
     from ..leg import prescribe_straight_leg
     from ..init_tools import sin_around_touchdown, add_costs
-    from ..tasks import periodic
+    from ..constrain import straight_leg, periodic
 
     nfe = len(robot.m.fe)
     ncp = len(robot.m.cp)
@@ -398,8 +399,8 @@ def periodic_gallop_test(robot,
         prescribe_contact_order(feet, foot_order_vals)  # type: ignore
         for (touchdown, liftoff), foot in zip(foot_order_vals, [foot.name.rstrip('_foot') for foot in feet]):
             lower, upper = foot, 'U' + foot[1:]
-            prescribe_straight_leg(robot[upper]['q'], robot[lower]['q'],
-                                   [touchdown], state='theta')
+            straight_leg(robot[upper]['q'], robot[lower]['q'],
+                         [touchdown], state='theta')
 
             angles = sin_around_touchdown(int((touchdown + liftoff)/2),
                                           len(robot.m.fe))

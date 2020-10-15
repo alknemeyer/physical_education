@@ -1,6 +1,6 @@
-from typing import Tuple, TYPE_CHECKING
+from typing import List, Tuple, TYPE_CHECKING
 from . import utils
-from pyomo.environ import Constraint
+from pyomo.environ import Constraint, Var
 
 if TYPE_CHECKING:
     from .system import System3D
@@ -46,3 +46,26 @@ def periodic(robot: 'System3D', but_not: Tuple[str, ...], but_not_vel: Tuple[str
         'periodic_dq', Constraint(
             range(len(dqs)), rule=lambda m, i: dqs[i][0] == dqs[i][1])
     )
+
+
+def straight_leg(upper: Var, lower: Var, fes: List[int], state: str):
+    """
+    >>> straight_leg(robot['thigh']['q'], robot['calf']['q'], [4, 15], 'theta')
+    which does the equivalent of,
+    >>> m.straight_leg_thigh_calf = Constraint([4, 15],
+    ...     rule=lambda m, fe: robot['thigh']['q'][fe,ncp,'theta'] == robot['thigh']['q'][fe,ncp,'theta'])
+
+    or for all legs of a quadruped:
+
+    >>> for (touchdown, liftoff), (upper, lower) in zip(foot_order_vals, (('UFL', 'LFL'), ('UFR', 'LFR'), ('UBL', 'LBL'), ('UBR', 'LBR'))):  # keep in sync with feet!
+    ...     straight_leg(robot[upper]['q'], robot[lower]['q'], [touchdown, liftoff+1])
+    """
+    m = upper.model()
+    ncp = len(m.cp)
+
+    name = f'straight_leg_{upper.name}_{lower.name}'
+
+    utils.remove_constraint_if_exists(m, name)
+
+    setattr(m, name, Constraint(fes,
+                                rule=lambda m, fe: lower[fe, ncp, state] == upper[fe, ncp, state]))
