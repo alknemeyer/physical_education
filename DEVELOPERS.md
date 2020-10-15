@@ -22,7 +22,7 @@ Eg. matplotlib, pyomo, numpy from:
 For example, prismatic links. Through some subclassing/refactoring, you may get away very writing very little code? Otherwise, it could be written as a node?
 
 ## Add more node types
-For example, hard stop joints and springs between links
+For example, hard stop joints between links
 
 ## Switch to a different animation library
 `matplotlib` isn't great for animations - it's quite slow, not interactive, and so on. Switching to eg. `pyqtgraph` could be nice (and might not require that much work) but we'd need to make sure it works with a remote setup and across operating systems (ie not just linux)
@@ -31,3 +31,6 @@ Other libraries for doing things in 3D include:
    * https://github.com/K3D-tools/K3D-jupyter/tree/master
    * https://github.com/rougier/matplotlib-3d
    * https://matplotlib.org/matplotblog/posts/custom-3d-engine/
+
+## Use the `logging` module instead of/in addition to my stuff
+Would be very simple -- just replace some of the calls to `print` in `visual.py` with `logger.info`. See my [blog post](https://alknemeyer.github.io/technical/embedded-comms-with-python-part-2/#setting-up-logging) on how you might do this

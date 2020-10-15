@@ -13,6 +13,7 @@ from . import (
     motor,
     visual,
     init_tools,
+    spring,
 )
 
 __all__ = [
@@ -26,7 +27,6 @@ __all__ = [
     'drag',
     'motor',
     'visual',
-    'init_tools'
+    'init_tools',
+    'spring',
 ]
-
-# TODO: Rename library to something like rigid_body_traj_opt (import as rbt)
