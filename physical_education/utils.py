@@ -488,6 +488,18 @@ def get_vals(var: Var, idxs: Optional[Tuple] = None) -> np.ndarray:
             return arr.reshape(nfe, *idxs)
 
 
+# idxs: Tuple[Union[Set,RangeSet], ...]
+def get_vals_v(var: Var, idxs: tuple) -> np.ndarray:
+    """
+    Verbose version that doesn't try to guess stuff for ya. Usage:
+
+    >>> get_vals(m.q, (m.N, m.DOF))
+    """
+    m = var.model()
+    arr = np.array([var[idx].value for idx in var]).astype(float)
+    return arr.reshape(*(len(i) for i in idxs))
+
+
 def get_indexes(nfe: int, ncp: int, *, one_based: bool, skipfirst: bool) -> List[Tuple[int, int]]:
     """ Get indices to index into variables, taking care of the funky first finite element
 
