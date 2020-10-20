@@ -4,23 +4,20 @@ from pyomo.environ import (
     ConcreteModel, Set, Var, Param, Constraint,
 )
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Any, Optional, TYPE_CHECKING, Union
-# from collections import namedtuple
+from typing import Callable, Dict, List, Any, Optional, TYPE_CHECKING, Tuple, Union
 from . import utils
 
 if TYPE_CHECKING:
     from .variable_list import VariableList
     import numpy as np
-    # from .links import Link3D
 
 
-# DummyVar = namedtuple('DummyVar', ['forcename', 'expr', 'sym'])
 @dataclass
 class _DummyVar:
     forcename: str
     expr: 'sp.Expression'
     sym: sp.Symbol
-    func: Union[Callable[...,float],None] = None
+    func: Union[Callable[..., float], None] = None
 
 
 class SimpleForceBase3D:
@@ -98,7 +95,7 @@ class SimpleForceBase3D:
 
             setattr(m, f'{self.name}_{d.forcename}_constr',
                     Constraint(m.fe, m.cp, rule=def_force))
-            
+
             d.func = forcefunc
 
     def save_data_to_dict(self) -> Dict[str, Any]:
@@ -147,10 +144,10 @@ class SimpleForceBase3D:
     def plot(self) -> None:
         import matplotlib.pyplot as plt
         m = self._get_model_if_dummy_vars()
-        
+
         if m is None:
             return
-        
+
         for d in self._dummyvars:
             F = utils.get_vals(self.pyomo_vars[d.forcename], (m.cp,))
             plt.plot(F)
