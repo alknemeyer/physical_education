@@ -108,12 +108,13 @@ def add_linearspring(link: 'Link3D', otherlink: 'Link3D',
     spring = LinearSpring3D(name, pos1=pos1, pos2=pos2,
                             spring_coeff=spring_coeff,
                             rest_length=rest_length)
-    link.nodes[name] = spring
+
+    link.nodes[name] = spring  # type: ignore
     return spring
 
 
 def add_torquespring(link: 'Link3D', otherlink: 'Link3D',
-                     relative_angle: Mat,
+                     relative_angle: 'sp.Expression',
                      spring_coeff: float,
                      rest_angle: float,
                      name: Optional[str] = None):
@@ -122,5 +123,6 @@ def add_torquespring(link: 'Link3D', otherlink: 'Link3D',
     spring = TorqueSpring3D(name, relative_angle=relative_angle,
                             spring_coeff=spring_coeff,
                             rest_angle=rest_angle)
-    link.nodes[name] = spring
+
+    link.nodes[name] = spring  # type: ignore
     return spring
