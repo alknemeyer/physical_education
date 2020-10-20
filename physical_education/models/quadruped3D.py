@@ -1,10 +1,9 @@
 from typing import Any, Dict, Iterable, Optional, Tuple, Callable
 from math import pi as π
-import numpy as np
 from sympy import Matrix as Mat
 from ..links import Link3D, constrain_rel_angle
 from ..system import System3D
-from ..foot import add_foot
+from ..foot import add_foot, feet
 from ..motor import add_torque
 from ..drag import add_drag
 from ..spring import add_torquespring
@@ -99,8 +98,8 @@ def model(params: Dict[str, Any]) -> Tuple[System3D, Callable[[System3D], None]]
     body_F = Link3D('base_F', '+x', start_I=body_B.bottom_I, **params['body_F'],
                     meta=['spine', 'front'])
 
-    body_B.add_hookes_joint(body_F, about='xy')
-    add_torque(body_B, body_F, about='xy', **params['motor_params'])
+    body_B.add_hookes_joint(body_F, about='xyz')
+    add_torque(body_B, body_F, about='xyz', **params['motor_params'])
 
     tail0 = Link3D('tail0', '-x', start_I=body_B.top_I,
                    **params['tail0'], meta=['tail'])
@@ -111,12 +110,14 @@ def model(params: Dict[str, Any]) -> Tuple[System3D, Callable[[System3D], None]]
     add_foot(tail1, at='bottom', nsides=8, friction_coeff=0.1,
              GRFxy_max=0.1, GRFz_max=0.1)
 
+    # input torques to tail
     body_B.add_hookes_joint(tail0, about='xy')
     add_torque(body_B, tail0, about='xy', **params['tail_motor_params'])
 
     tail0.add_hookes_joint(tail1, about='xy')
     add_torque(tail0, tail1, about='xy', **params['tail_motor_params'])
 
+    # drag on body and tail
     add_drag(body_F, at=body_F.bottom_I, name='body_F-drag-head',
              use_dummy_vars=True, cylinder_top=True)
     add_drag(body_F, at=body_F.Pb_I, name='body_F-drag-body',
@@ -124,6 +125,16 @@ def model(params: Dict[str, Any]) -> Tuple[System3D, Callable[[System3D], None]]
     add_drag(body_B, at=body_B.Pb_I, use_dummy_vars=True)
     add_drag(tail0, at=tail0.Pb_I, use_dummy_vars=True)
     add_drag(tail1, at=tail1.Pb_I, use_dummy_vars=True)
+
+    # spring forces on spine
+    phi_b, th_b, psi_b = body_B.q[3:]
+    phi_f, th_f, psi_f = body_F.q[:3]
+    add_torquespring(body_B, body_F, phi_b - phi_f, spring_coeff=2.0,
+                     rest_angle=0, name='spine-torquespring-roll')
+    add_torquespring(body_B, body_F, th_b - th_f, spring_coeff=0.5,
+                     rest_angle=0, name='spine-torquespring-pitch')
+    add_torquespring(body_B, body_F, psi_b - psi_f, spring_coeff=2.0,
+                     rest_angle=0, name='spine-torquespring-yaw')
 
     def def_leg(body: Link3D, front: bool, right: bool) -> Tuple[Link3D, Link3D]:
         """Define a leg and attach it to the front/back right/left of `body`.
@@ -277,9 +288,7 @@ def high_speed_stop(robot: System3D, initial_vel: float, minimize_distance: bool
                 link['q'][fe, cp, 'theta'].value = (
                     math.radians(random.gauss(0, 15)))
 
-        body['q'][1, ncp, 'z'].fix(1.0)
-        for fe, cp in robot.indices(one_based=True):
-            body['q'][fe, cp, 'z'].setub(1.2)
+        body['q'][1, ncp, 'z'].fix(0.6)
 
         # both sides mirrored
         for src, dst in (('UFL', 'UFR'), ('LFL', 'LFR'), ('UBL', 'UBR'), ('LBL', 'LBR')):
@@ -290,6 +299,17 @@ def high_speed_stop(robot: System3D, initial_vel: float, minimize_distance: bool
             for fe, cp in robot.indices(one_based=True):
                 link['q'][fe, cp, 'theta'].value = (
                     math.radians(random.random()*60))
+
+        # stop weird local minimum where it bounces
+        for fe, cp in robot.indices(one_based=True):
+            if fe in range(10): continue
+            # if fe > nfe/2: continue
+
+            height = body['q'][fe, cp, 'z']
+            height.setub(0.6)  # approx. leg height
+        
+            for foot in feet(robot):
+                foot['foot_height'][fe,cp].setub(0.01)
 
     # start at speed
     body['dq'][1, ncp, 'x'].fix(initial_vel)
@@ -341,7 +361,6 @@ def periodic_gallop_test(robot,
     import random
     from ..utils import constrain_total_time
     from ..foot import prescribe_contact_order
-    from ..leg import prescribe_straight_leg
     from ..init_tools import sin_around_touchdown, add_costs
     from ..constrain import straight_leg, periodic
 
