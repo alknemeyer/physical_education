@@ -3,10 +3,9 @@ __version__ = '0.1.2'
 
 from . import (
     foot,
-    leg,
     links,
     system,
-    tasks,
+    constrain,
     utils,
     models,
     drag,
@@ -18,10 +17,9 @@ from . import (
 
 __all__ = [
     'foot',
-    'leg',
     'links',
     'system',
-    'tasks',
+    'constrain',
     'utils',
     'models',
     'drag',
