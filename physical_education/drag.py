@@ -23,7 +23,7 @@ from sympy import Matrix as Mat
 
 from .links import Link3D
 from .system import System3D
-from .utils import norm
+from .utils import norm, get_name
 from . import utils
 
 if TYPE_CHECKING:
@@ -344,11 +344,7 @@ class Drag3D:
 
 
 def add_drag(link, at: Mat, name: Optional[str] = None, **kwargs):
-    if name is None:
-        name = link.name + '_drag'
-
-    assert name not in link.nodes,\
-        f'This link already has a node with the name {name}'
+    name = get_name(name, [link], 'drag')
 
     v = sp.zeros(3, 1)
     v['xyz'.index(link.aligned_along[1])] = 1
@@ -359,7 +355,7 @@ def add_drag(link, at: Mat, name: Optional[str] = None, **kwargs):
     else:
         coeff = cylinder_in_air(A=link.length * (2 * link.radius))
 
-    drag = Drag3D(str(name),
+    drag = Drag3D(name,
                   r=at,
                   area_norm=link.Rb_I * v,
                   coeff=coeff,

@@ -5,7 +5,7 @@ from pyomo.environ import (
     ConcreteModel, Constraint, Set, Var, Param,
 )
 from sympy import Matrix as Mat
-from . import utils, visual
+from . import utils
 from .system import System3D
 from .links import Link3D
 
@@ -301,11 +301,7 @@ class Motor3D:
 
 
 def add_torque(link, otherlink, about: str, name: Optional[str] = None, **kwargs):
-    if name is None:
-        name = f'{link.name}_{otherlink.name}_torque'
-
-    assert name not in link.nodes,\
-        f'This link already has a node with the name {name}'
+    name = utils.get_name(name, [link, otherlink], 'torque')
 
     motor = Motor3D(str(name), link.Rb_I, **kwargs)
     link.nodes[name] = motor

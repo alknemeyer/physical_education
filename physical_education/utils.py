@@ -559,3 +559,15 @@ def in_ipython() -> bool:
 
 def has_variable_timestep(m: ConcreteModel) -> bool:
     return m.hm.type() == Var  # .ctype
+
+
+def get_name(name: Union[str, None], links: Iterable, suffix: str):
+    if name is None:
+        name = '_'.join(link.name for link in links) + f'_{suffix}'
+
+    link = next(iter(links))
+
+    assert name not in link.nodes,\
+        f'Link {link.name} already has a node with the name {name}'
+
+    return name

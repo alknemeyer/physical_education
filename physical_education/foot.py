@@ -379,11 +379,7 @@ def add_foot(link, at: str, name: Optional[str] = None, **kwargs):
         `at` is usually `self.bottom_I`. Eg:
         >>> foot.add_foot(link, at='bottom')
         """
-    if name is None:
-        name = link.name + '_foot'
-
-    assert name not in link.nodes,\
-        f'This link already has a node with the name {name}'
+    name = utils.get_name(name, [link], 'foot')
 
     assert at in ('top', 'bottom'), \
         "Can only add ground contacts at top or bottom of foot"
