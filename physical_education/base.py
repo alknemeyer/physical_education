@@ -1,10 +1,9 @@
 import sympy as sp
-from sympy import Matrix as Mat
 from pyomo.environ import (
     ConcreteModel, Set, Var, Param, Constraint,
 )
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Any, Optional, TYPE_CHECKING, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Any, Optional, TYPE_CHECKING, Tuple, Union
 from . import utils
 
 if TYPE_CHECKING:
@@ -29,8 +28,14 @@ class _DummyParamToFind:
 
 
 class SimpleForceBase3D:
+    """
+    Class to simplify creating 3D force inputs, like springs, dampers, etc
+
+    For a usage example, see `TorqueSpring3D` in `physical_education/spring.py`
+
+    NB: the class that inherits from this one must implement `calc_eom()`!
+    """
     name: str
-    _plot_config: Dict[str, Any] = {}
 
     # not to be used/overwritten by other classes that inherit
 
@@ -39,9 +44,23 @@ class SimpleForceBase3D:
     def __init__(self) -> None:
         self._dummyvars = []
 
-    def _dummyvar(self, expr: 'sp.Expression', forcename: str):
+    def _assert_initialized(self):
+        # this could happen when another class inherits from this one,
+        # and overwrites the __init__ method
         if not hasattr(self, '_dummyvars'):
-            raise RuntimeError('SimpleForceBase3D hasnt been initialized')
+            raise RuntimeError("SimpleForceBase3D hasn't been initialized")
+
+    def _dummyvar(self, expr: 'sp.Expression', forcename: str) -> sp.Symbol:
+        """
+        Creates a dummy variable equal to `expr`, with the name `forcename`
+        Returns a `sp.Symbol` which the caller can use as part of the dynamics
+        """
+        # TODO: haven't yet figured out how to make this work. If we have
+        # f_dummy = dummify(f(q, dq))
+        # then f_dummy isn't explicitly a function of q an dq, resulting
+        # in errors if you take its derivative. Hmm
+        # maybe makes more sense if use with an index?
+        self._assert_initialized()
 
         sym = sp.Symbol(forcename + '_{%s}' % self.name)
         self._dummyvars.append(
@@ -49,15 +68,19 @@ class SimpleForceBase3D:
         )
         return sym
 
-    # TODO: symname which is different from paramname?
     def _dummyparam(self, paramname: str,
                     initiavalue: float,
                     lims: Tuple[float, float],
-                    symname: Optional[str] = None):
-        if not hasattr(self, '_dummyvars'):
-            raise RuntimeError('SimpleForceBase3D hasnt been initialized')
+                    symname: Optional[str] = None) -> sp.Symbol:
+        """
+        Creates a dummy parameter with initial value `initiavalue`, constrained
+        to remain within `lims[0] <= value <= lims[1]`
+        Returns a `sp.Symbol` which the caller can use as part of the dynamics
+        """
+        self._assert_initialized()
 
-        if symname is None: symname = paramname
+        if symname is None:
+            symname = paramname
         sym = sp.Symbol(symname + '_{%s}' % self.name)
 
         assert lims[0] <= lims[1]
@@ -66,16 +89,13 @@ class SimpleForceBase3D:
         )
         return sym
 
-    def _get_model_if_dummy_vars(self) -> Optional[ConcreteModel]:
+    def _get_model_if_dummy_vars(self) -> Union[ConcreteModel, None]:
         if len(self._dummyvars) > 0:
             return self.pyomo_vars[self._dummyvars[0].name].model()
         else:
             return None
 
     ####
-
-    # def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
-    #     return sp.zeros(*q.shape)
 
     def add_vars_to_pyomo_model(self, m: ConcreteModel) -> None:
         if not hasattr(self, 'pyomo_params'):
