@@ -1,5 +1,5 @@
 # Publishing a new version
-Install [flit](https://flit.readthedocs.io/en/latest/), which makes publishing packages ridiculously easy. Next, increase the `__version__` number in [physical_education/__init__.py](physical_education/__init__.py). Then, create a (local) [tag](https://git-scm.com/book/en/v2/Git-Basics-Tagging) the commit and publish:
+Install [flit](https://flit.readthedocs.io/en/latest/), which makes publishing packages ridiculously easy. Next, increase the `__version__` number in [`physical_education/__init__.py`](physical_education/__init__.py). Then, create a (local) [tag](https://git-scm.com/book/en/v2/Git-Basics-Tagging) the commit and publish:
 
 ```bash
 # make a local tag with message "release v0.0.1"
@@ -34,3 +34,22 @@ Other libraries for doing things in 3D include:
 
 ## Use the `logging` module instead of/in addition to my stuff
 Would be very simple -- just replace some of the calls to `print` in `visual.py` with `logger.info`. See my [blog post](https://alknemeyer.github.io/technical/embedded-comms-with-python-part-2/#setting-up-logging) on how you might do this
+
+## Remove `3D` suffix from everything
+Either that, or go ahead and add 2D versions of things, possibly putting all 3D stuff in a folder like `d3` and 2D stuff in `d2`
+
+Ie, you'd have:
+```
+physical_education/
+   d3/
+      system.py
+      links.py
+      drag.py
+   d2/
+      system.py
+      links.py
+   visualisation.py
+   etc.py
+```
+
+Otherwise, you might decide that abstracting away 2D just is more work than it's worth, and it might even not be a good idea (see [this talk](https://www.deconstructconf.com/2019/dan-abramov-the-wet-codebase) and why you _shouldn't_ abstract everything)
