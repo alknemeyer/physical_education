@@ -1,11 +1,11 @@
+from typing import List
 from pyomo.environ import value as pyovalue
 import numpy as np
-import numbers
 from .motor import torques, power
 from .system import System3D
 
 
-def get_power_values(robot: System3D, force_scale: float):
+def get_power_values(robot: System3D, force_scale: float) -> List[np.ndarray]:
     nfe = len(robot.m.fe)
     power_arr = []
 
