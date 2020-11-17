@@ -8,14 +8,9 @@ if TYPE_CHECKING:
 
 
 class VariableList:
-    """Access pyomo variables using
-    ```
-    >>> variable_list[fe,cp]
-    ```
-    with fe = 1..nfe, cp = 1..ncp (ie, one-based)
+    """Access pyomo variables using `variable_list[fe,cp]`, with
+    `fe = 1..nfe`, `cp = 1..ncp` (ie, one-based)
     """
-    # sources_of_vars is an iterable of Links. Typing is tricky due to circular imports
-
     def __init__(self, m: ConcreteModel, sources_of_vars: Iterable['Link3D']):
         self.sources_of_vars = sources_of_vars
 

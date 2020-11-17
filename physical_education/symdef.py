@@ -9,14 +9,14 @@ def make_xyz_syms(i: str) -> Tuple[Mat, Mat, Mat]:
     """
     Define x, y, z symbols and time derivatives, with subscript `i`
 
-    ```
+    ## Usage
+
     >>> xyz, dxyz, ddxyz = make_xyz_syms('test')
     >>> dxyz
     Matrix([
     [\\dot{x}_{test}],
     [\\dot{y}_{test}],
     [\\dot{z}_{test}]])
-    ```
     """
     global USE_LATEX
     if USE_LATEX is True:
@@ -25,8 +25,8 @@ def make_xyz_syms(i: str) -> Tuple[Mat, Mat, Mat]:
         ddq = sp.symbols(
             r'\ddot{x}_{%s} \ddot{y}_{%s} \ddot{z}_{%s}' % (i, i, i))
     else:
-        q = sp.symbols(f'  x_{i}   y_{i}   z_{i}')
-        dq = sp.symbols(f' dx_{i}  dy_{i}  dz_{i}')
+        q = sp.symbols(f'    x_{i}   y_{i}   z_{i}')
+        dq = sp.symbols(f'  dx_{i}  dy_{i}  dz_{i}')
         ddq = sp.symbols(f'ddx_{i} ddy_{i} ddz_{i}')
 
     return Mat(q), Mat(dq), Mat(ddq)
@@ -36,14 +36,14 @@ def make_ang_syms(i: str) -> Tuple[Mat, Mat, Mat]:
     """
     Define `\\phi`, `\\theta`, `\\psi` (ϕ θ ψ) symbols and time derivatives, with subscript `i`
 
-    ```
+    ## Usage
+
     >>> ptp, dptp, ddptp = make_ang_syms('test')
     >>> dptp
     Matrix([
     [  \\dot{\\phi}_{test}],
     [\\dot{\\theta}_{test}],
     [  \\dot{\\psi}_{test}]])
-    ```
     """
     global USE_LATEX
     if USE_LATEX is True:

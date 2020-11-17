@@ -10,10 +10,11 @@ def periodic(robot: 'System3D', but_not: Tuple[str, ...], but_not_vel: Tuple[str
     """
     Make all position and velocity states in `robot` periodic, except for the
     positions (q) defined in `but_not` and the velocities (dq) in `but_not_vel`
-    ```
+
+    ## Usage
+
     >>> periodic(robot, but_not=('x',))
     >>> periodic(robot, but_not=('x', 'y'), but_not_vel=('x', 'y'))
-    ```
     """
     assert robot.m is not None,\
         'robot does not have a pyomo model defined on it'
@@ -50,15 +51,24 @@ def periodic(robot: 'System3D', but_not: Tuple[str, ...], but_not_vel: Tuple[str
 
 def straight_leg(upper: Var, lower: Var, fes: List[int], state: str):
     """
+    Constrain `state` in `upper` to be the same as `lower` at finite elements `fes`
+
+    ## Usage
+
     >>> straight_leg(robot['thigh']['q'], robot['calf']['q'], [4, 15], 'theta')
+
     which does the equivalent of,
+
+    >>> thigh = robot['thigh']['q']
+    >>> calf = robot['calf']['q']
     >>> m.straight_leg_thigh_calf = Constraint([4, 15],
-    ...     rule=lambda m, fe: robot['thigh']['q'][fe,ncp,'theta'] == robot['thigh']['q'][fe,ncp,'theta'])
+    ...     rule=lambda m, fe: thigh[fe,ncp,'theta'] == calf[fe,ncp,'theta'])
 
     or for all legs of a quadruped:
 
-    >>> for (touchdown, liftoff), (upper, lower) in zip(foot_order_vals, (('UFL', 'LFL'), ('UFR', 'LFR'), ('UBL', 'LBL'), ('UBR', 'LBR'))):  # keep in sync with feet!
-    ...     straight_leg(robot[upper]['q'], robot[lower]['q'], [touchdown, liftoff+1])
+    >>> feet = (('UFL', 'LFL'), ('UFR', 'LFR'), ('UBL', 'LBL'), ('UBR', 'LBR'))
+    >>> for (touchdown, liftoff), (upper, lower) in zip(foot_order_vals, feet):
+    ...     straight_leg(robot[upper]['q'], robot[lower]['q'], [touchdown, liftoff])
     """
     m = upper.model()
     ncp = len(m.cp)

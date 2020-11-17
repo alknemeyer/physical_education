@@ -87,7 +87,8 @@ class TorqueSpring3D(SimpleForceBase3D):
         Δ = self.relative_angle
         Δ0 = self.rest_angle
         Ef = 1/2 * k * (Δ - Δ0)**2
-        return - Mat([Ef]).jacobian(q).T
+        Q = - Mat([Ef]).jacobian(q).T
+        return Q
 
         # from IPython.display import display
         # f_dummy = self._dummify(expr=f, forcename=f'Fspring_{self.name}')

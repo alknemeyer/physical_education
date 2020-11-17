@@ -519,31 +519,6 @@ def get_indexes(nfe: int, ncp: int, *, one_based: bool, skipfirst: bool) -> List
             if (i > 0 or j == ncp-1 or not skipfirst)]
 
 
-class MarkovBinaryWalk():
-    """Generate a Markov process random walk which alternates between two states:
-    `a` and `b`. If in state `a`, return 1 then stay in state `a` with probability
-    `a_prob`. Otherwise, go to state `b`. If in state `b`, return 0 and stay in
-    state `b` with probability `b_prob`"""
-
-    def __init__(self, a_prob: float, b_prob: float):
-        self.a_prob = a_prob
-        self.b_prob = b_prob
-        # self.state: Union[Literal['a'],Literal['b']] = 'a'
-        self.state = 'a'
-
-    def step(self):
-        import random
-        if self.state == 'a':
-            self.state = 'a' if random.random() < self.a_prob else 'b'
-            return 1
-        else:
-            self.state = 'b' if random.random() < self.b_prob else 'a'
-            return 0
-
-    def walk(self, n):
-        return np.array([self.step() for _ in range(n)], dtype=int)
-
-
 # https://stackoverflow.com/a/22424821/1892669
 def in_ipython() -> bool:
     try:

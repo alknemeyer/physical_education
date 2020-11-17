@@ -24,7 +24,6 @@ def getattrs(items: Iterable, attr: str) -> List:
 
 
 class System3D:
-    # m: Union[ConcreteModel, None] = None
     def __init__(self, name: str, links: List['Link3D']) -> None:
         self.name = name
         self.links = links
@@ -183,7 +182,7 @@ class System3D:
         import dill
         import os.path
         if os.path.isfile(filename) and overwrite_existing is False:
-            raise FileExistsError
+            raise FileExistsError(filename)
 
         with open(filename, 'wb') as f:
             dill.dump(self.save_data_to_dict(description), f, recurse=True)
@@ -454,130 +453,3 @@ class System3D:
             from pyomo.util.infeasible import log_infeasible_bounds
             print('Infeasible bounds:')
             log_infeasible_bounds(self.m, tol=tol)
-
-    # def init_from_robot(self, source: 'System3D', interpolation: str = 'linear'):
-    #     """
-    #     Initialize a model from a solved one, interpolating values if needed
-    #     """
-    #     # TODO: change this to be more like the dict approach above! Or just use that instead!
-    #     utils.debug('Only use init_from_robot with two robots which are identical, but'
-    #                 ' with possibly differing finite elements and collocation points')
-    #     utils.warn('init_from_robot: haven\'t yet figured out what to do with `None`s at'
-    #                ' the beginning of things')
-    #     utils.warn('init_from_robot: some things (like dummy variables) aren\'t yet'
-    #                ' copied across')
-    #     # attempt to catch errors early on. TODO: think of more quick tests
-    #     assert len(self.links) == len(source.links)
-    #     assert interpolation == 'linear'
-
-    #     import math
-
-    #     def valid_num(num): return not (
-    #         num is None or math.isnan(num) or math.isinf(num)
-    #     )
-
-    #     # TODO: refactor into a different func?
-    #     # def supersample(new_x, old_x, data):
-    #     #     return np.interp(
-    #     #         np.linspace(0, 1, num=new_x),
-    #     #         np.linspace(0, 1, num=old_x),
-    #     #         data
-    #     #     )
-
-    #     # get data from source
-    #     hm = utils.get_vals(source.m.hm)
-
-    #     # interpolate
-    #     hm2 = np.interp(
-    #         np.linspace(0, 1, num=len(self.m.fe)),
-    #         np.linspace(0, 1, num=len(source.m.fe)),
-    #         hm)
-
-    #     # add to destination model
-    #     for fe in self.m.fe:
-    #         self.m.hm[fe].value = hm2[fe-1] if valid_num(hm2[fe-1]) else 1.0
-
-    #     for destlink, srclink in zip(self.links, source.links):
-    #         # get data from source. using `astype` to get rid of None's
-    #         srcdata = np.array([
-    #             var.value for fe in source.m.fe
-    #             for cp in source.m.cp
-    #             for var in srclink.get_pyomo_vars(fe, cp)
-    #         ]).reshape((len(source.m.fe) * len(source.m.cp), -1)).astype(float)
-
-    #         # x interpolation points (replace with cumsum of hm!)
-    #         x_orig = np.linspace(0, 1, num=len(source.m.fe) * len(source.m.cp))
-    #         x_dest = np.linspace(0, 1, num=len(self.m.fe) * len(self.m.cp))
-
-    #         destdata = [[destlink.get_pyomo_vars(fe, cp) for cp in self.m.cp]
-    #                     for fe in self.m.fe]
-
-    #         # interpolate
-    #         interpolated_data = np.zeros(
-    #             (x_dest.shape[0], srcdata.shape[1]))  # type: ignore
-    #         for varidx in range(srcdata.shape[1]):
-    #             interped = np.interp(x_dest, x_orig, srcdata[:, varidx])
-    #             # replace the np.nan's with None, for pyomo
-    #             interpolated_data[:, varidx] = np.where(
-    #                 np.isnan(interped), None, interped)  # type: ignore
-
-    #         # add to destination model
-    #         ncp = len(self.m.cp)
-    #         skipped_vars = []
-    #         for fe, cp in self.indices(one_based=False):
-    #             for varidx, var in enumerate(destdata[fe][cp]):
-    #                 num = interpolated_data[fe*ncp + cp, varidx]
-
-    #                 if var.is_fixed():
-    #                     skipped_vars.append(var)
-    #                     continue
-    #                 if not valid_num(num):
-    #                     print('skipping invalid number:', num,
-    #                           'at index', varidx, 'for variable', var)
-    #                     continue
-
-    #                 var.value = num
-
-    #         if len(skipped_vars) > 0:
-    #             from textwrap import shorten
-    #             utils.debug(
-    #                 shorten(f'skipped variables because they are fixed: {skipped_vars}', width=100))
-
-
-    # # Figure out how to handle constraints etc with this presolve approach. Eg min distance, etc
-    # def presolve(self, collocation: str, nfe: int, setup_func: Callable[['System3D'], None], no_C: bool,
-    #              make_pyomo_model_kwargs: dict = {}, default_solver_kwargs: dict = {}):
-    #     """
-    #     Create a new (simpler) model, solve it, then copy over the (interpolated) values
-    #     to this model. Note -- this function is definitely worth reading through in detail, especially
-    #     to know what defaults it chooses for you! If you're not sure, rather don't use this!
-
-    #     Example:
-    #     >>> robot.make_pyomo_model(nfe=50, collocation='radau', total_time=1.5)
-    #     >>> def add_task(robot):
-    #     ...     add_pyomo_constraints(robot)
-    #     ...     high_speed_stop(robot, initial_vel=20.0)
-    #     >>> add_task(robot)
-    #     >>> solver_kwargs = {'OF_print_frequency_time': 10, 'OF_hessian_approximation': 'limited-memory', }
-    #     >>> robot.presolve(nfe=10, collocation='euler', setup_func=add_task, no_C=True,
-    #     ...                default_solver_kwargs=solver_kwargs)
-    #     >>> ret = utils.default_solver(max_mins=30, solver='ma86', **solver_kwargs).solve(robot.m, tee=True)
-    #     """
-    #     import copy
-
-    #     new_sys = copy.deepcopy(self)
-    #     new_sys.make_pyomo_model(nfe=nfe, collocation=collocation, presolve_no_C=no_C,
-    #                              total_time=float(
-    #                                  self.m.hm0.value * len(self.m.fe)),
-    #                              **make_pyomo_model_kwargs)
-    #     setup_func(new_sys)
-
-    #     results = utils.default_solver(max_mins=10, solver='ma86',
-    #                                    OF_hessian_approximation='limited-memory',
-    #                                    **default_solver_kwargs).solve(new_sys.m, tee=True)
-
-    #     from pyomo.opt import TerminationCondition
-    #     if results.solver.termination_condition == TerminationCondition.infeasible:  # type: ignore
-    #         utils.warn('Presolving returned an infeasible result')
-
-    #     self.init_from_robot(new_sys)

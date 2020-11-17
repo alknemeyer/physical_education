@@ -7,9 +7,9 @@ from pyomo.environ import (
 from sympy import Matrix as Mat
 from . import utils
 from .system import System3D
-from .links import Link3D
 
 if TYPE_CHECKING:
+    from .links import Link3D
     from .variable_list import VariableList
 
 
@@ -61,8 +61,6 @@ class _TorqueSpeedLimit:
             ω = self.rel_angle_vels_f[idx](pyo_variables[fe, 1])
             τ = Tc[fe, idx]
 
-            # return inequality(- τ_s, τ * (1 - ω / ω_n), τ_s)
-            # return inequality(- τ_s, τ * ω / ω_n, τ_s)
             if posneg == '+':
                 return τ <= τ_sp * (1 - ω / ω_n)
             elif posneg == '-':
@@ -148,10 +146,10 @@ class Motor3D:
         # a list of tuples of [torques_on_body, rotation, about] on other bodies
         self.other_bodies: List[Tuple[Mat, Mat, str]] = []
 
-    def add_input_torques_at(self, otherlink, about: str):
+    def add_input_torques_at(self, otherlink: 'Link3D', about: str):
         """ Add input torques between two links, about axis `about` of `self`
         >>> link_body.add_input_torques_at(link_UFL, about='xy')
-        TODO: THINK MORE ABOUT WHAT THIS REALLY MEANS! The second torque should really be rotated
+        TODO: THINK MORE ABOUT WHAT THIS REALLY MEANS!
         """
         assert all(axis in 'xyz' for axis in about)
 
@@ -309,7 +307,7 @@ def add_torque(link, otherlink, about: str, name: Optional[str] = None, **kwargs
     return motor
 
 
-def torques(robot_or_link: Union[System3D, Link3D]) -> List[Motor3D]:
+def torques(robot_or_link: Union[System3D, 'Link3D']) -> List[Motor3D]:
     from typing import cast
 
     if isinstance(robot_or_link, System3D):
