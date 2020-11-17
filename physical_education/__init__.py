@@ -13,6 +13,7 @@ from . import (
     visual,
     init_tools,
     spring,
+    damper,
 )
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     'visual',
     'init_tools',
     'spring',
+    'damper',
 ]
