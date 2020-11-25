@@ -90,7 +90,7 @@ class Drag3D:
             'force_scale': 1/10,
         }
 
-    def calc_eom(self, q, dq, ddq) -> Mat:
+    def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
         # angle between area and drag force (a scalar)
         # used to get the effective area
         dr_eqn = Mat(self.r.jacobian(q) * dq)

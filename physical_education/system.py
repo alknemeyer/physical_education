@@ -90,7 +90,7 @@ class System3D:
             link.get_sympy_vars() for link in self.links
         )
 
-        utils.info(f'Number of operations in EOM is {sp.count_ops(eom)}')
+        visual.info(f'Number of operations in EOM is {sp.count_ops(eom)}')
 
         # TODO: the lambdifying step actually takes quite long -- any way to speed it up?
         from pyomo.environ import atan
@@ -123,7 +123,8 @@ class System3D:
 
         if presolve_no_C:
             raise NotImplementedError(
-                'Both EOM and EOM no C are saved to the model, but EOM no C is not used')
+                'Both EOM and EOM no C are saved to the model, but EOM no C is not used'
+            )
 
         self.m = m = ConcreteModel(name=self.name)
 
@@ -164,7 +165,7 @@ class System3D:
                 return self.eom_f[i]([*self.pyo_variables[fe, cp], m.force_scale]) == 0 \
                     if not (fe == 1 and cp < ncp) else Constraint.Skip
         else:
-            utils.warn('Not including dynamics (EOM_constr) in model')
+            visual.warn('Not including dynamics (EOM_constr) in model')
 
     def save_data_to_dict(self, description: str) -> Dict[str, Any]:
         return {
@@ -187,9 +188,15 @@ class System3D:
         with open(filename, 'wb') as f:
             dill.dump(self.save_data_to_dict(description), f, recurse=True)
 
-    def init_from_dict_one_point(self, data: Dict[str, Any], fed: int, cpd: int, fes: Optional[int] = None, cps: Optional[int] = None, **kwargs):
-        """fed and cpd are destination (ie pyomo, and 1-indexed), fes and cps are source (ie dictionary, and 0-indexed)"""
-        assert self.m is not None
+    def init_from_dict_one_point(self, data: Dict[str, Any],
+                                 fed: int, cpd: int,
+                                 fes: Optional[int] = None, cps: Optional[int] = None,
+                                 **kwargs):
+        """
+        fed and cpd are destination (ie pyomo, and 1-indexed), fes and cps
+        are source (ie dictionary, and 0-indexed)
+        """
+        m = utils.get_pyomo_model_or_error(self)
 
         if fes is None:
             fes = fed - 1
@@ -197,16 +204,18 @@ class System3D:
             cps = cpd - 1
 
         # TODO: ignore this warning when accounting for differing number of finite elements
-        if not self.m.hm0.value == data['hm0']:
+        if not m.hm0.value == data['hm0']:
             utils.warn(
-                f'init_from_dict_one_point: self.hm0 = {self.m.hm0.value} != {data["hm0"]} = data["hm0"]', once=True)
+                f'init_from_dict_one_point: self.hm0 = {m.hm0.value} != {data["hm0"]} = data["hm0"]', once=True
+            )
 
-        if utils.has_variable_timestep(self.m):
-            utils.maybe_set_var(self.m.hm[fed], data['hm'][fes], **kwargs)
+        if utils.has_variable_timestep(m):
+            utils.maybe_set_var(m.hm[fed], data['hm'][fes], **kwargs)
 
         for link, linkdata in zip(self.links, data['links']):
             link.init_from_dict_one_point(
-                linkdata, fed, cpd, fes, cps, **kwargs)
+                linkdata, fed, cpd, fes, cps, **kwargs
+            )
 
     def init_from_dict(self, data: Dict[str, Any], **kwargs):
         for fed, cpd in self.indices(one_based=True):
@@ -214,15 +223,16 @@ class System3D:
 
     def init_from_file(self, filename: str, **kwargs):
         import dill
-        # this could just be:
-        # >>> self.init_from_dict(dill.load(open(filename, 'rb')), **kwargs)
+
         with open(filename, 'rb') as f:
             data = dill.load(f)
 
         self.init_from_dict(data, **kwargs)
 
     def indices(self, *, one_based: bool, skipfirst: bool = True) -> List[Tuple[int, int]]:
-        return utils.get_indexes(len(self.m.fe), len(self.m.cp), one_based=one_based, skipfirst=skipfirst)
+        return utils.get_indexes(
+            len(self.m.fe), len(self.m.cp), one_based=one_based, skipfirst=skipfirst
+        )
 
     def __getitem__(self, linkname: str) -> 'Link3D':
         for link in self.links:
@@ -230,7 +240,8 @@ class System3D:
                 return link
 
         raise KeyError(
-            f'No link with name "{linkname}". Available links are: {", ".join(link.name for link in self.links)}')
+            f'No link with name "{linkname}". Available links are: {", ".join(link.name for link in self.links)}'
+        )
 
     def plot_keyframes(self,
                        keyframes: List[int],
@@ -245,7 +256,9 @@ class System3D:
         # typing this as 'Any' because the method accesses following give
         # false warnings otherwise...
         fig, ax, add_ground = visual.plot3d_setup(
-            scale_plot_size=False, **plot3d_config)
+            scale_plot_size=False, **plot3d_config
+        )
+
         if lims is not None:
             x, y, z = lims
             ax.set_xlim(*x)
@@ -303,17 +316,16 @@ class System3D:
         import matplotlib.animation
         import matplotlib.pyplot as plt
 
-        assert self.m is not None, \
-            'robot does not have a pyomo model defined on it'
+        pyo_model = utils.get_pyomo_model_or_error(self)
 
         # typing this as 'Any' because the method accesses following give
         # false warnings otherwise...
         fig, ax, add_ground = visual.plot3d_setup(
-            scale_plot_size=False, **plot3d_config)
+            scale_plot_size=False, **plot3d_config
+        )
 
         if lims is not None:
             x, y, z = lims
-            ax: Any
             ax.set_xlim(*x)
             ax.set_ylim(*y)
             ax.set_zlim(*z)
@@ -357,7 +369,7 @@ class System3D:
                 ground.remove()
                 ground = add_ground((ax.get_xlim(), ax.get_ylim()))
         else:
-            if not utils.has_variable_timestep(self.m):
+            if not utils.has_variable_timestep(pyo_model):
                 t_arr = np.cumsum(
                     np.array([self.m.hm[fe] for fe in self.m.fe]))
             else:  # the t_arr below is variable step
@@ -368,7 +380,8 @@ class System3D:
 
                 for link in self.links:
                     link.animation_update(
-                        fig, ax, t=t, t_arr=t_arr, track=(track == link.name))
+                        fig, ax, t=t, t_arr=t_arr, track=(track == link.name)
+                    )
 
                 nonlocal ground
                 ground.remove()
@@ -378,7 +391,7 @@ class System3D:
         # then try to clone a model, you get an error from matplotlib about
         # certain things not being cloneable. So -> try/catch/finally block
         try:
-            if not utils.has_variable_timestep(self.m):
+            if not utils.has_variable_timestep(pyo_model):
                 t_sum = sum(self.m.hm[fe]
                             for fe in self.m.fe if fe != nfe) * self.m.hm0.value
             else:
@@ -387,8 +400,10 @@ class System3D:
 
             interval_ms = 1000*t_scale * \
                 (t_sum / nfe / ncp if dt is None else dt)
-            frames = [fe for fe in self.m.fe] if dt is None else np.arange(
-                start=0, stop=t_sum+dt, step=dt)
+
+            frames = [fe for fe in self.m.fe] if dt is None else \
+                np.arange(start=0, stop=t_sum+dt, step=dt)
+
             anim = matplotlib.animation.FuncAnimation(
                 fig, _animate, frames=frames, interval=interval_ms
             )
@@ -413,12 +428,12 @@ class System3D:
             del fig, ax
 
     def plot(self, plot_links: bool = True) -> None:
-        assert self.m is not None
-        
-        if utils.has_variable_timestep(self.m):
+        pyo_model = utils.get_pyomo_model_or_error(self)
+
+        if utils.has_variable_timestep(pyo_model):
             import matplotlib.pyplot as plt
             plt.title('Timestep size vs finite element')
-            data = 1000*utils.get_vals(self.m.hm) * self.m.hm0.value
+            data = 1000*utils.get_vals(pyo_model.hm) * pyo_model.hm0.value
             plt.plot(data)
             plt.ylabel('Timestep size [ms]')
             plt.ylim([0, max(data)*1.1])
@@ -435,7 +450,9 @@ class System3D:
     def post_solve(self, costs: Optional[Dict[str, Any]] = None, detailed: bool = False, tol: float = 1e-6):
         from .foot import feet_penalty
         from pyomo.environ import value as pyovalue
-        print('Total cost:', pyovalue(self.m.cost))
+
+        pyo_model = utils.get_pyomo_model_or_error(self)
+        print('Total cost:', pyovalue(pyo_model.cost))
 
         if costs is not None:
             for k, v in costs.items():
@@ -448,8 +465,8 @@ class System3D:
         if detailed is True:
             from pyomo.util.infeasible import log_infeasible_constraints
             print('Infeasible constraints:')
-            log_infeasible_constraints(self.m, tol=tol)
+            log_infeasible_constraints(pyo_model, tol=tol)
 
             from pyomo.util.infeasible import log_infeasible_bounds
             print('Infeasible bounds:')
-            log_infeasible_bounds(self.m, tol=tol)
+            log_infeasible_bounds(pyo_model, tol=tol)

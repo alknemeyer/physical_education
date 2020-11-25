@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Callable, Optional, Tuple, Union, Iterable, TYPE_CHECKING
-from typing_extensions import TypedDict
+from typing_extensions import Literal, TypedDict
 import sympy as sp
 import numpy as np
 
@@ -19,7 +19,7 @@ PlotConfig = TypedDict('PlotConfig', plot_forces=bool, force_scale=float)
 
 
 class Foot3D:
-    def __init__(self, name: str, Pb_I: Mat, nsides: int,
+    def __init__(self, name: str, Pb_I: Mat, nsides: Literal[4, 8],
                  GRFxy_max: float = 30.,
                  GRFz_max: float = 30.,
                  friction_coeff: Optional[float] = None):
@@ -34,14 +34,14 @@ class Foot3D:
         self.D = friction_polygon(nsides)
         self.Lx = Mat(sp.symbols('L_{%s/x:%s}' % (name, nsides)))
         self.Lz = sp.Symbol('L_{%s/z}' % name)
-        self.L = Mat(self.D).T @ self.Lx + Mat([0, 0, self.Lz])
+        self.L = Mat(self.D).T @ self.Lx + Mat([0, 0, self.Lz])  # type: ignore
 
         self._plot_config: PlotConfig = {
             'plot_forces': True,
             'force_scale': 1/10,
         }
 
-    def calc_eom(self, q, dq, ddq) -> Mat:
+    def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
         self.Pb_I_vel = self.Pb_I.jacobian(q) @ dq
 
         jac_L = self.Pb_I.jacobian(q)
@@ -118,7 +118,10 @@ class Foot3D:
             'GRFxy': utils.get_vals(self.pyomo_vars['GRFxy'], (fric_set,)),
         }
 
-    def init_from_dict_one_point(self, data: Dict[str, Any], fed: int, cpd: int, fes: Optional[int] = None, cps: Optional[int] = None, **kwargs) -> None:
+    def init_from_dict_one_point(self, data: Dict[str, Any],
+                                 fed: int, cpd: int,
+                                 fes: Optional[int] = None, cps: Optional[int] = None,
+                                 **kwargs) -> None:
         if fes is None:
             fes = fed - 1
         if cps is None:
@@ -174,7 +177,7 @@ class Foot3D:
 
         ncp = len(m.cp)
 
-        def add_constraints(name: str, func: Callable, indexes: tuple):
+        def add_constraints(name: str, func: Callable, indexes: Iterable):
             setattr(m, self.name + '_' + name,
                     Constraint(*indexes, rule=func))
 
@@ -412,7 +415,7 @@ def feet_penalty(robot: 'System3D'):
     )
 
 
-def friction_polygon(nsides: int) -> np.ndarray:
+def friction_polygon(nsides: Literal[4, 8]) -> np.ndarray:
     if nsides == 4:
         # the four edges of a square - a very rough approximation to a friction cone
         return np.array([
@@ -447,7 +450,7 @@ def interactively_set_timings(feet: Iterable[str], nfe: int, wait_until_all_set:
     Before using this, you'll likely need to enable `@jupyter-widgets/jupyterlab-manager`
     as a jupyterlab extension. See eg:
     https://stackoverflow.com/questions/36351109/ipython-notebook-ipywidgets-does-not-show
-    
+
     >>> interactively_set_timings([link.foot.name for link in robot.links if link.has_foot()], nfe=50, time=0.35)
     """
     funcs = []
@@ -474,7 +477,7 @@ def set_timing(nfe: int, *, time: Optional[float] = None, initial: Optional[Tupl
     >>> while not f()['done']: sleep(0.5)
     >>> print('The values are:', f()['values'])
     """
-    import ipywidgets as widgets  # pyright: reportMissingImports=false
+    from ipywidgets import SelectionRangeSlider, Button, HBox  # type: ignore
 
     assert when_done in ('close', 'disable')
 
@@ -488,22 +491,25 @@ def set_timing(nfe: int, *, time: Optional[float] = None, initial: Optional[Tupl
     if initial is None:
         initial = (1, nfe)
 
-    assert 1 <= initial[0] <= nfe and 1 <= initial[
-        1] <= nfe, f'Invalid initial range: {initial}'
-    slider = widgets.SelectionRangeSlider(
-        value=initial,
-        options=options,
-        index=(0, len(options)-1),
-        description=description,
-        layout={'width': width}
+    assert 1 <= initial[0] <= initial[1] <= nfe, f'Invalid initial range: {initial}'
+
+    # for whatever reason, this is the only way
+    # I've managed to stop PyLance from reporting
+    # errors. Please fix!
+    slider = SelectionRangeSlider(  # type: ignore
+        value=initial,  # type: ignore
+        options=options,  # type: ignore
+        index=(0, len(options)-1),  # type: ignore
+        description=description,  # type: ignore
+        layout={'width': width},  # type: ignore
     )
 
-    button = widgets.Button(
-        description='Click when done',
-        disabled=False,
-        button_style='',
-        tooltip='Click me',
-        icon='check'
+    button = Button(
+        description='Click when done',  # type: ignore
+        disabled=False,  # type: ignore
+        button_style='',  # type: ignore
+        tooltip='Click me',  # type: ignore
+        icon='check',  # type: ignore
     )
 
     done = False
@@ -522,7 +528,7 @@ def set_timing(nfe: int, *, time: Optional[float] = None, initial: Optional[Tupl
     button.on_click(finish_up)
 
     from IPython.display import display
-    display(widgets.HBox([slider, button]))
+    display(HBox([slider, button]))
 
     return lambda: {'done': done, 'values': slider.value}
 

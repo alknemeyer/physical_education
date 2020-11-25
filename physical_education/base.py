@@ -3,7 +3,7 @@ from pyomo.environ import (
     ConcreteModel, Set, Var, Param, Constraint,
 )
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Any, Optional, TYPE_CHECKING, Tuple, Union
+from typing import Callable, Dict, List, Any, Optional, TYPE_CHECKING, Tuple, Union
 from . import utils
 
 if TYPE_CHECKING:
@@ -34,11 +34,12 @@ class SimpleForceBase3D:
     For a usage example, see `TorqueSpring3D` in `physical_education/spring.py`
 
     NB: the class that inherits from this one must implement `calc_eom()`!
+        also, if the class implements `__init__()`, it must manually
+        `__init__()` this one (again, see `spring.py`)
     """
     name: str
 
     # not to be used/overwritten by other classes that inherit
-
     _dummyvars: List[Union[_DummyVar, _DummyParamToFind]]
 
     def __init__(self) -> None:
@@ -57,9 +58,9 @@ class SimpleForceBase3D:
         """
         # TODO: haven't yet figured out how to make this work. If we have
         # f_dummy = dummify(f(q, dq))
-        # then f_dummy isn't explicitly a function of q an dq, resulting
-        # in errors if you take its derivative. Hmm
-        # maybe makes more sense if use with an index?
+        # then f_dummy isn't explicitly a function of q and dq, resulting
+        # in errors if you take its derivative
+        # maybe makes more sense if used with an index?
         self._assert_initialized()
 
         sym = sp.Symbol(forcename + '_{%s}' % self.name)
@@ -78,12 +79,13 @@ class SimpleForceBase3D:
         Returns a `sp.Symbol` which the caller can use as part of the dynamics
         """
         self._assert_initialized()
+        assert lims[0] <= lims[1]
 
         if symname is None:
             symname = paramname
+        
         sym = sp.Symbol(symname + '_{%s}' % self.name)
 
-        assert lims[0] <= lims[1]
         self._dummyvars.append(
             _DummyParamToFind(paramname, sym, initiavalue, lims)
         )
@@ -174,7 +176,7 @@ class SimpleForceBase3D:
                     Constraint(m.fe, m.cp, rule=def_constraint))
 
     def save_data_to_dict(self) -> Dict[str, Any]:
-        dct = {'name': self.name}
+        dct: Dict[str, Any] = {'name': self.name}
 
         m = self._get_model_if_dummy_vars()
         if m is not None:

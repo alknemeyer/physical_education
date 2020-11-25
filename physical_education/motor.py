@@ -1,9 +1,9 @@
 import sympy as sp
 import numpy as np
-from typing import Any, Dict, Iterator, List, Optional, Tuple, TYPE_CHECKING, Union
-from pyomo.environ import (
-    ConcreteModel, Constraint, Set, Var, Param,
+from typing import (
+    Any, Dict, Iterator, List, Optional, Tuple, TYPE_CHECKING, Union
 )
+import pyomo.environ as pyo
 from sympy import Matrix as Mat
 from . import utils
 from .system import System3D
@@ -33,10 +33,10 @@ class _TorqueSpeedLimit:
         self.torque_bounds = torque_bounds
         self.no_load_speed = no_load_speed
 
-        self.relative_angle_velocities: List = []  # sympy equations
+        self.relative_angle_velocities: List['sp.Expression'] = []
         self.axes: List[str] = []
 
-    def add_rel_vel(self, rel_velocity, axis: str):
+    def add_rel_vel(self, rel_velocity: 'sp.Expression', axis: str):
         self.relative_angle_velocities.append(rel_velocity)
         self.axes.append(axis)
 
@@ -44,7 +44,8 @@ class _TorqueSpeedLimit:
                                      sp_variables: List[sp.Symbol],
                                      pyo_variables: 'VariableList',
                                      collocation: str,
-                                     Tc, Tc_set):
+                                     Tc: pyo.Var,
+                                     Tc_set: pyo.Set):
         m = Tc.model()
         self.Tc = Tc
         self.Tc_set = Tc_set
@@ -73,7 +74,7 @@ class _TorqueSpeedLimit:
             f'The model already has a constraint with the name {constraintname}'
 
         setattr(m, constraintname,
-                Constraint(m.fe, Tc_set, ('+', '-'), rule=torque_speed_limit_constr))
+                pyo.Constraint(m.fe, Tc_set, ('+', '-'), rule=torque_speed_limit_constr))
 
     def plot(self, _ax=None, markersize: float = 5.):
         m = self.Tc.model()
@@ -170,7 +171,7 @@ class Motor3D:
         self.other_bodies.append(
             (torques_on_other_body, otherlink.Rb_I, about))
 
-    def calc_eom(self, q, dq, ddq) -> Mat:
+    def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
         ang_vel_body = utils.skew_symmetric(self.Rb_I, q, dq)
         dW = Mat([self.torques_on_body.dot(ang_vel_body)])
         Q = dW.jacobian(dq).T
@@ -188,7 +189,9 @@ class Motor3D:
 
         return Q
 
-    def add_vars_to_pyomo_model(self, m: ConcreteModel) -> None:
+    def add_vars_to_pyomo_model(self, m: pyo.ConcreteModel) -> None:
+        from pyomo.environ import Set, Var, Param
+
         Tc_set = Set(initialize=range(len(self.input_torques)),
                      name='Tc_set', ordered=True)
         Tc = Var(m.fe, Tc_set, name='Tc', bounds=self.torque_bounds)
@@ -203,7 +206,7 @@ class Motor3D:
             self.pyomo_vars.values(),
         ])
 
-    def __getitem__(self, varname: str) -> Var:
+    def __getitem__(self, varname: str) -> pyo.Var:
         return self.pyomo_vars[varname]
 
     def get_pyomo_vars(self, fe: int, cp: int) -> List:
@@ -397,4 +400,4 @@ def max_power_constraint(robot: 'System3D', maxpower: float):
         f'The model already has a constraint with the name {constraintname}'
 
     setattr(robot.m, constraintname,
-            Constraint(robot.m.fe, rule=powerlimit_f))
+            pyo.Constraint(robot.m.fe, rule=powerlimit_f))

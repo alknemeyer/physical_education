@@ -1,7 +1,7 @@
 # https://stackoverflow.com/questions/15853469/putting-current-class-as-return-type-annotation
 # can't use this while supporting python 3.6 (PyPy 7.3), have to use strings for now
 # from __future__ import annotations
-from typing import Any, Dict, Iterable, Optional, List, cast
+from typing import Any, Dict, Iterable, Optional, List, TYPE_CHECKING, cast
 from typing_extensions import TypedDict
 import sympy as sp
 import numpy as np
@@ -95,8 +95,8 @@ class Link3D:
         self.bottom_I = self.Pb_I - self.Rb_I @ offset_b
 
         # defining other things for later use
-        self.constraint_forces: List = []
-        self.angle_constraints: List = []
+        self.constraint_forces: List[sp.Symbol] = []
+        self.angle_constraints: List['sp.Expression'] = []
         self._plot_config: PlotConfig = {
             'shape': 'line',
             'linewidth': 2.,
@@ -112,13 +112,13 @@ class Link3D:
 
         self.nodes: Dict[str, Node] = {}
 
-    def calc_eom(self, q, dq, ddq) -> Mat:
+    def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
         if len(self.angle_constraints) > 0:
             J_c = Mat(self.angle_constraints).jacobian(q)
             Fr = Mat(self.constraint_forces)
             Q = J_c.T @ Fr
         else:
-            Q = sp.zeros(len(q), 1)
+            Q = sp.zeros(len(q), 1)  # type: ignore
 
         for node in self.nodes.values():
             Q += node.calc_eom(q, dq, ddq)
@@ -148,8 +148,8 @@ class Link3D:
         assert about in ('x', 'y', 'z')
         axes = Mat([1, 0, 0]), Mat([0, 1, 0]), Mat([0, 0, 1])
         constraint_axis = axes['xyz'.index(about)]
-        other_axes = [mat for idx, mat in enumerate(
-            axes) if idx != 'xyz'.index(about)]
+        other_axes = [mat for idx, mat in enumerate(axes)
+                      if idx != 'xyz'.index(about)]
 
         self.angle_constraints.extend([
             (self.Rb_I @ constraint_axis).dot(otherlink.Rb_I @ other_axes[0]),
@@ -336,7 +336,7 @@ class Link3D:
                     linewidth: Optional[float] = None) -> 'Link3D':
         """Configuration for how this link should be plotted"""
         # TODO: Still thinking about what's actually useful here. Not sure if this is a
-        # wise move - I essentially am just overwriting defaults, to some extent?
+        # wise move - we are essentially just overwriting defaults, to some extent?
         if color is not None:
             self._plot_config['color'] = color
 

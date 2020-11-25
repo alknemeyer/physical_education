@@ -1,16 +1,19 @@
-# this file really should be named better...
+# TODO: this file really should be named better...
 from pyomo.environ import Var
 import numpy as np
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional, TYPE_CHECKING
 
-from .system import System3D
-from .links import Link3D
 from .foot import feet, feet_penalty
 from . import motor
 from . import utils
 
 
-def init_vel_acc_from_pos(robot: System3D, link: Link3D, varname: str):
+if TYPE_CHECKING:
+    from .system import System3D
+    from .links import Link3D
+
+
+def init_vel_acc_from_pos(robot: 'System3D', link: 'Link3D', varname: str):
     """
     >>> robot['LBL']['dq'][:,:,'theta'].value = 0
     >>> robot['LBL']['ddq'][:,:,'theta'].value = 0
@@ -52,7 +55,7 @@ def sin_around_touchdown(fe: int, nfe: int) -> np.ndarray:
     return np.sin(x)  # type: ignore
 
 
-def bound_penalty_and_add_transport_cost(robot: System3D, penalty_limit: float):
+def bound_penalty_and_add_transport_cost(robot: 'System3D', penalty_limit: float):
     from pyomo.environ import Objective
     utils.info('Deleting previous cost function')
     robot.m.del_component('cost')
@@ -80,7 +83,9 @@ def bound_penalty_and_add_transport_cost(robot: System3D, penalty_limit: float):
     return {'penalty': pen_cost, 'transport': transport_cost}
 
 
-def remove_contact_constraints(robot):
+def remove_contact_constraints(robot: 'System3D'):
+    m = utils.get_pyomo_model_or_error(robot)
+
     for foot in feet(robot):
         fh = foot['foot_height']
         grfz = foot['GRFz']
@@ -90,40 +95,36 @@ def remove_contact_constraints(robot):
             grfz[fe, cp].fixed = False
             grfz[fe, cp].setlb(0)
 
-    for constraint in [c for c in dir(robot.m) if 'straight_leg' in c]:
-        utils.remove_constraint_if_exists(robot.m, constraint)
+    for constraint in [c for c in dir(m) if 'straight_leg' in c]:
+        utils.remove_constraint_if_exists(m, constraint)
 
 
-def add_costs(robot,
+def add_costs(robot: 'System3D',
               include_transport_cost: bool,
               include_torque_cost: bool,
               transport_axis: str = 'x',
               scale: float = 0.001,
               **other_costs) -> dict:  # time cost? distance cost?
     from pyomo.environ import Objective
-    utils.remove_constraint_if_exists(robot.m, 'cost')
+    m = utils.get_pyomo_model_or_error(robot)
+    utils.remove_constraint_if_exists(m, 'cost')
 
     body = robot.links[0]
     nfe = len(robot.m.fe)
     ncp = len(robot.m.cp)
 
-    # TODO: scale by time and body weight?
-#     torque_cost = sum([Tc**2 for link in robot.links for Tc in link['Tc'][:,:]])
-    torque_cost = motor.torque_squared_penalty(robot)
-    # the commented out code makes things slower... hmmm. Could be worth trying with just hm0?
-#     torque_cost = 0
-#     for link in robot.links:
-#         for fe in robot.m.fe:
-#             for Tc in link.pyomo_sets['Tc_set']:
-#                 torque_cost += robot.m.hm[fe] * robot.m.hm0 * link['Tc'][fe,Tc]**2
+    torque_cost = (
+        motor.torque_squared_penalty(robot)*scale
+        if include_torque_cost else 0
+    )
 
-    transport_cost = torque_cost / body['q'][nfe, ncp, transport_axis]
+    transport_cost = (
+        torque_cost / body['q'][nfe, ncp, transport_axis]*scale
+        if include_transport_cost else 0
+    )
 
-    #pen_cost = sum(link.foot.penalty_sum() for link in robot.links if link.has_foot())
     pen_cost = feet_penalty(robot)
-    robot.m.cost = Objective(expr=pen_cost
-                             + (transport_cost*scale if include_transport_cost else 0)
-                             + (torque_cost*scale if include_torque_cost else 0)
+    robot.m.cost = Objective(expr=pen_cost + transport_cost + torque_cost
                              + sum(v for v in other_costs.values()))
 
     return {'penalty': pen_cost, 'transport': transport_cost, 'torque': torque_cost, **other_costs}
@@ -135,8 +136,8 @@ def increase_motor_limits(robot: System3D, *, torque_bound: float, no_load_speed
     >>> increase_motor_limits(robot, torque_bound=5., no_load_speed=100.)
     >>> ol.motor.torques(robot)[0]['Tc'].pprint()
     """
-    assert robot.m is not None,\
-        'robot does not have a pyomo model defined on it'
+    # make sure it has a pyomo model
+    utils.get_pyomo_model_or_error(robot)
 
     for motor_ in motor.torques(robot):
         for Tc in motor_['Tc'][:, :]:
@@ -158,11 +159,10 @@ def fecp2val(nfe: int, ncp: int):
 
 
 # UNTESTED
-
-
-def init_with_function(var: Var, func: Callable[[float], float],
+def init_with_function(var: Var,
+                       func: Callable[[float], float],
                        lowerbound: Optional[float] = None,
-                       otherinds: tuple = (),
+                       otherinds: Iterable = (),
                        fixiflt0: bool = False):  # fix if less than 0
     """ func called with 0..1
     >>> init_with_function(var, lambda i: math.cos(0.2 + 2*math.pi*i)/5, lowerbound=0)

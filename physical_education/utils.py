@@ -1,10 +1,16 @@
-from typing import Any, Iterable, Callable, Optional, Tuple, List, TypeVar, Union
+from typing import (
+    Any, Iterable, Callable, Optional, Tuple, List, TypeVar, Union, TYPE_CHECKING
+)
 import sympy as sp
 import numpy as np
 from pyomo.environ import ConcreteModel, Var, Set, Param, RangeSet, Constraint
 from sympy import Matrix as Mat
 from .visual import info, debug, warn
 sp.init_printing()
+
+
+if TYPE_CHECKING:
+    from .system import System3D
 
 # derivatives ################################################################
 
@@ -205,7 +211,8 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
 # simplification #################################################################
 
 
-def parsimp_worker(_arg: Tuple[Any, Any], allow_recur: bool = True):
+def parsimp_worker(_arg: Tuple['sp.Expression', 'sp.Expression'],
+                   allow_recur: bool = True):
     expr, simp_func = _arg
 
     if expr.is_number or expr.is_Symbol:
@@ -226,7 +233,8 @@ def parsimp_worker(_arg: Tuple[Any, Any], allow_recur: bool = True):
     return expr.func(*args)
 
 
-def parsimp(mat: Mat, nprocs: int, f=sp.trigsimp) -> Mat:
+def parsimp(mat: Mat, nprocs: int,
+            f: Callable[['sp.Expression'], 'sp.Expression'] = sp.trigsimp) -> Mat:
     import multiprocessing
     with multiprocessing.Pool(processes=nprocs) as p:
         return sp.Matrix(
@@ -289,7 +297,8 @@ def add_to_pyomo_model(m: ConcreteModel, prefix: str, vals: Iterable[Iterable[Py
         setattr(m, newname, v)
 
 
-def def_var(m: ConcreteModel, name: str, indexes: tuple, func: Callable, bounds: tuple = (None, None)):
+def def_var(m: ConcreteModel, name: str, indexes: tuple, func: Callable,
+            bounds: Tuple[Optional[float], Optional[float]] = (None, None)):
     """Define a variable, equal to the result of a function. Eg:
 
     >>> def_var(m, 'foot_height', (m.fe,), bounds=(0, None),
@@ -379,6 +388,9 @@ def constrain_total_time(m: ConcreteModel, total_time: float):
 # other utils for pyomo ######################################################
 
 
+# could default to 'ipopt', but there are often multiple
+# IPOPT installations on a given computer, so perhaps being
+# explicit is better than implicit
 IPOPT_PATH: Union[str, None] = None
 
 
@@ -546,3 +558,10 @@ def get_name(name: Union[str, None], links: Iterable, suffix: str):
         f'Link {link.name} already has a node with the name {name}'
 
     return name
+
+
+def get_pyomo_model_or_error(robot: 'System3D') -> ConcreteModel:
+    m = robot.m
+    assert m is not None, ('The system does not have a pyomo model defined on it\n'
+                           'You likely need to run .make_pyomo_model()')
+    return m

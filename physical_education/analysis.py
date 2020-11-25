@@ -1,11 +1,13 @@
-from typing import List
+from typing import List, TYPE_CHECKING
 from pyomo.environ import value as pyovalue
 import numpy as np
 from .motor import torques, power
-from .system import System3D
+
+if TYPE_CHECKING:
+    from .system import System3D
 
 
-def get_power_values(robot: System3D, force_scale: float) -> List[np.ndarray]:
+def get_power_values(robot: 'System3D', force_scale: float) -> List[np.ndarray]:
     nfe = len(robot.m.fe)
     power_arr = []
 
@@ -20,7 +22,7 @@ def get_power_values(robot: System3D, force_scale: float) -> List[np.ndarray]:
     return power_arr
 
 
-def print_power_values(robot, force_scale: float):
+def print_power_values(robot: 'System3D', force_scale: float):
     power_arr = get_power_values(robot, force_scale)
 
     s = 'Motor'.ljust(20) + '| Mean absolute power'

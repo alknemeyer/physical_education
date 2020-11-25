@@ -1,15 +1,15 @@
 from dataclasses import dataclass, field
 import sympy as sp
 from sympy import Matrix as Mat
-import numpy as np
+# import numpy as np
 from typing import List, Optional, TYPE_CHECKING, Tuple
 
 from .base import SimpleForceBase3D
-from .visual import LineAnimation
+# from .visual import LineAnimation
 from .utils import norm, get_name
 
 if TYPE_CHECKING:
-    from .variable_list import VariableList
+    # from .variable_list import VariableList
     from .links import Link3D
 
 

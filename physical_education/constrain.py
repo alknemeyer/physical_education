@@ -16,13 +16,12 @@ def periodic(robot: 'System3D', but_not: Tuple[str, ...], but_not_vel: Tuple[str
     >>> periodic(robot, but_not=('x',))
     >>> periodic(robot, but_not=('x', 'y'), but_not_vel=('x', 'y'))
     """
-    assert robot.m is not None,\
-        'robot does not have a pyomo model defined on it'
+    pyo_model = utils.get_pyomo_model_or_error(robot)
 
-    nfe, ncp = len(robot.m.fe), len(robot.m.cp)
+    nfe, ncp = len(pyo_model.fe), len(pyo_model.cp)
 
-    utils.remove_constraint_if_exists(robot.m, 'periodic_q')
-    utils.remove_constraint_if_exists(robot.m, 'periodic_dq')
+    utils.remove_constraint_if_exists(pyo_model, 'periodic_q')
+    utils.remove_constraint_if_exists(pyo_model, 'periodic_dq')
 
     # periodic positions
     qs = [
@@ -31,7 +30,7 @@ def periodic(robot: 'System3D', but_not: Tuple[str, ...], but_not_vel: Tuple[str
         for q in link.pyomo_sets['q_set']
         if q not in but_not
     ]
-    robot.m.add_component(
+    pyo_model.add_component(
         'periodic_q', Constraint(
             range(len(qs)), rule=lambda m, i: qs[i][0] == qs[i][1])
     )
@@ -43,7 +42,7 @@ def periodic(robot: 'System3D', but_not: Tuple[str, ...], but_not_vel: Tuple[str
         for q in link.pyomo_sets['q_set']
         if q not in but_not_vel
     ]
-    robot.m.add_component(
+    pyo_model.add_component(
         'periodic_dq', Constraint(
             range(len(dqs)), rule=lambda m, i: dqs[i][0] == dqs[i][1])
     )
