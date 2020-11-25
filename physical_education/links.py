@@ -129,9 +129,15 @@ class Link3D:
         """Add a hooke's joint about axis `about` of `self`
         >>> link_body.add_hookes_joint(link_UFL, about='xy')
         """
-        assert all(ax in ('x', 'y', 'z') for ax in about)
-        ang_constr = (self.Rb_I @ Mat([1, 0, 0])
-                      ).dot(otherlink.Rb_I @ Mat([0, 1, 0]))
+        assert all(ax in ('x', 'y', 'z') for ax in about) and len(about) == 2
+
+        axes = Mat([1, 0, 0]), Mat([0, 1, 0]), Mat([0, 0, 1])
+        vec1 = axes['xyz'.index(about[0])]
+        vec2 = axes['xyz'.index(about[1])]
+
+        ang_constr = (
+            (self.Rb_I @ vec1).dot(otherlink.Rb_I @ vec2)
+        )
         self.angle_constraints.append(ang_constr)
 
         self.constraint_forces.append(
