@@ -130,7 +130,7 @@ def add_costs(robot: 'System3D',
     return {'penalty': pen_cost, 'transport': transport_cost, 'torque': torque_cost, **other_costs}
 
 
-def increase_motor_limits(robot: System3D, *, torque_bound: float, no_load_speed: float):
+def increase_motor_limits(robot: 'System3D', *, torque_bound: float, no_load_speed: float):
     """
     >>> robot.make_pyomo_model(nfe=10,  collocation='implicit_euler', total_time=0.3, scale_forces_by=30.)
     >>> increase_motor_limits(robot, torque_bound=5., no_load_speed=100.)
