@@ -163,6 +163,13 @@ Larger models benefit tremendously from using [PyPy](https://www.pypy.org/) inst
 
 ... which is at times much easier said than done. Instructions are [here](https://github.com/coin-or/Ipopt#getting-started). You'll also need to install a linear solver. The HSL solvers are the best for many tasks, and their multi-core MA86 solver in particular is very fast. There's [a page](http://www.hsl.rl.ac.uk/ipopt/) about HSL + Ipopt, which you should read. This step is usually far easier when done in a Unix environment, like [Ubuntu](https://ubuntu.com/) and others like it
 
+If you use a multi-core solver like MA86, you can configure the number of threads to use by setting the `OMP_NUM_THREADS` environment variable _before_ you launch Python. This can be done on Ubuntu by adding a line like,
+```
+# set the number of threads for eg. ma86
+OMP_NUM_THREADS=8
+```
+to the `/etc/environment` file, then entering `. /etc/environment` in a shell or just rebooting. There are other ways of doing this, but due to the way PyOmo runs IPOPT, I've found this to be the easiest and most reliable.
+
 Another way to get the Ipopt binary (plus mumps as a default solver) is by using cyipopt package, which has a [super easy installation process](https://github.com/matthias-k/cyipopt#using-conda) (`conda install -c conda-forge cyipopt`) on Linux and Mac
 
 While you're waiting for things to compile/install, please read this article on [supporting black scholars in robotics](https://spectrum.ieee.org/automaton/at-work/education/supporting-black-scholars-in-robotics). All fields (even technical ones, like robotics) are political, and it's crucial that you make an active effort to learn about and combat injustices, such as racism and sexism.
