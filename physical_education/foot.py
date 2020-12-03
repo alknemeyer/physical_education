@@ -533,7 +533,7 @@ def set_timing(nfe: int, *, time: Optional[float] = None, initial: Optional[Tupl
     return lambda: {'done': done, 'values': slider.value}
 
 
-def prescribe_contact_order(feet: List[Foot3D], ground_timings: Iterable[Tuple[int, int]],
+def prescribe_contact_order(feet: Iterable[Foot3D], ground_timings: Iterable[Tuple[int, int]],
                             min_foot_height: float = 0.005, min_GRFz: float = 0.001) -> None:
     """
     Prescribe `feet` to be on the ground using the ranges specified in `ground_timings`.
@@ -550,10 +550,10 @@ def prescribe_contact_order(feet: List[Foot3D], ground_timings: Iterable[Tuple[i
     >>> prescribe_contact_order(feet, foot_order_vals)
     """
     def inclusive_range(start, stop): return range(start, stop+1)
-    m = feet[0]['GRFz'].model()
-    nfe = len(m.fe)
 
     def foot_fix_util(foot: Foot3D, start: int, stop: int):
+        m = foot['GRFz'].model()
+        nfe = len(m.fe)
         GRFz = foot['GRFz']
         foot_height = foot['foot_height']
 
