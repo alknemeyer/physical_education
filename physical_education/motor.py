@@ -11,6 +11,7 @@ from .system import System3D
 if TYPE_CHECKING:
     from .links import Link3D
     from .variable_list import VariableList
+    from matplotlib.pyplot import Axes
 
 
 class _TorqueSpeedLimit:
@@ -74,9 +75,10 @@ class _TorqueSpeedLimit:
             f'The model already has a constraint with the name {constraintname}'
 
         setattr(m, constraintname,
-                pyo.Constraint(m.fe, Tc_set, ('+', '-'), rule=torque_speed_limit_constr))
+                pyo.Constraint(m.fe, Tc_set, ('+', '-'),
+                               rule=torque_speed_limit_constr))
 
-    def plot(self, _ax=None, markersize: float = 5.):
+    def plot(self, _ax: Optional['Axes'] = None, markersize: float = 5.):
         m = self.Tc.model()
         # ncp = len(m.cp)
         data: List[List[float]] = [
