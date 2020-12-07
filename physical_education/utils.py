@@ -1,5 +1,5 @@
 from typing import (
-    Any, Iterable, Callable, Optional, Tuple, List, TypeVar, Union, TYPE_CHECKING
+    Iterable, Callable, Optional, Tuple, List, TypeVar, Union, TYPE_CHECKING
 )
 import sympy as sp
 import numpy as np
@@ -11,6 +11,7 @@ sp.init_printing()
 
 if TYPE_CHECKING:
     from .system import System3D
+    from .links import Link3D
 
 # derivatives ################################################################
 
@@ -548,13 +549,17 @@ def has_variable_timestep(m: ConcreteModel) -> bool:
     return m.hm.type() == Var  # .ctype
 
 
-def get_name(name: Union[str, None], links: Iterable, suffix: str):
+def total_time(m: ConcreteModel) -> float:
+    return sum(m.hm[fe].value for fe in m.fe if fe != 1)*m.hm0.value
+
+
+def get_name(name: Union[str, None], links: Iterable['Link3D'], suffix: str):
     if name is None:
         name = '_'.join(link.name for link in links) + f'_{suffix}'
 
     link = next(iter(links))
 
-    assert name not in link.nodes,\
+    assert name not in link.nodes, \
         f'Link {link.name} already has a node with the name {name}'
 
     return name
