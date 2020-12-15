@@ -3,10 +3,12 @@ from math import pi as π
 from sympy import Matrix as Mat
 from ..links import Link3D, constrain_rel_angle
 from ..system import System3D
-from ..foot import add_foot, feet
+from ..foot import add_foot, feet, Foot3D
 from ..motor import add_torque
 from ..drag import add_drag
 from ..spring import add_torquespring
+from ..damper import add_torquedamper
+
 
 
 parameters = {
@@ -76,16 +78,19 @@ parameters = {
         },
         'back': {
             'thigh': {'mass': 0.210*1.2, 'radius': 0.010, 'length': 0.281},
-            'calf':  {'mass': 0.160*1.2, 'radius': 0.011, 'length': 0.287},
+            # based on ratio's
+            'calf':  {'mass': 0.100*1.2, 'radius': 0.011, 'length': 0.287 * 1.1*(33/(33+24.5))},
+            # from Liams model
+            'hock':  {'mass': 0.060*1.2, 'radius': 0.011, 'length': 0.287 * 1.1*(24.5/(33+24.5))},
         },
         'friction_coeff': 1.3,
-        'motor_params': {'torque_bounds': (-3., 3.), 'no_load_speed': 50.},
-        'tail_motor_params': {'torque_bounds': (-1., 1.), 'no_load_speed': 50.}
+        'motor_params': {'torque_bounds': (-5., 5.), 'no_load_speed': 50.},
+        'tail_motor_params': {'torque_bounds': (-2., 2.), 'no_load_speed': 50.}
     },
 }
 
 
-def model(params: Dict[str, Any]) -> Tuple[System3D, Callable[[System3D], None]]:
+def model(params: Dict[str, Any], with_tail: bool) -> Tuple[System3D, Callable[[System3D], None]]:
     """
     Roughly 400 000 operations in the equations of motion without simplification,
     and 142 520 if simplified with
@@ -101,42 +106,50 @@ def model(params: Dict[str, Any]) -> Tuple[System3D, Callable[[System3D], None]]
     body_B.add_hookes_joint(body_F, about='xyz')
     add_torque(body_B, body_F, about='xyz', **params['motor_params'])
 
-    tail0 = Link3D('tail0', '-x', start_I=body_B.top_I,
-                   **params['tail0'], meta=['tail'])
-    tail1 = Link3D('tail1', '-x', start_I=tail0.bottom_I,
-                   **params['tail1'], meta=['tail'])
+    # spring/damper forces on spine
+    phi_b, th_b, psi_b = body_B.q[3:]
+    phi_f, th_f, psi_f = body_F.q[:3]
+    for angles, dof in [(phi_b - phi_f, 'roll'),
+                        (th_b - th_f,  'pitch'),
+                        (psi_b - psi_f,  'yaw')]:
+        # TODO: actually find these by initialising to 0.5 and bounding to (0.1, 10.)
+        add_torquespring(body_B, body_F, angles, spring_coeff=0.5,
+                         #  spring_coeff_lims=(0.1, 10.),
+                         rest_angle=0,
+                         name=f'spine-torquespring-{dof}')
+        add_torquedamper(body_B, body_F, angles, damping_coeff=0.5,
+                         #  damping_coeff_lims=(0.1, 10.),
+                         name=f'spine-torquedamper-{dof}')
 
-    # TODO: maybe rather friction = 0 ?
-    add_foot(tail1, at='bottom', nsides=8, friction_coeff=0.1,
-             GRFxy_max=0.1, GRFz_max=0.1)
-
-    # input torques to tail
-    body_B.add_hookes_joint(tail0, about='xy')
-    add_torque(body_B, tail0, about='xy', **params['tail_motor_params'])
-
-    tail0.add_hookes_joint(tail1, about='xy')
-    add_torque(tail0, tail1, about='xy', **params['tail_motor_params'])
-
-    # drag on body and tail
+    # drag on body
     add_drag(body_F, at=body_F.bottom_I, name='body_F-drag-head',
              use_dummy_vars=True, cylinder_top=True)
     add_drag(body_F, at=body_F.Pb_I, name='body_F-drag-body',
              use_dummy_vars=True)
     add_drag(body_B, at=body_B.Pb_I, use_dummy_vars=True)
-    add_drag(tail0, at=tail0.Pb_I, use_dummy_vars=True)
-    add_drag(tail1, at=tail1.Pb_I, use_dummy_vars=True)
 
-    # spring forces on spine
-    phi_b, th_b, psi_b = body_B.q[3:]
-    phi_f, th_f, psi_f = body_F.q[:3]
-    add_torquespring(body_B, body_F, phi_b - phi_f, spring_coeff=2.0,
-                     rest_angle=0, name='spine-torquespring-roll')
-    add_torquespring(body_B, body_F, th_b - th_f, spring_coeff=0.5,
-                     rest_angle=0, name='spine-torquespring-pitch')
-    add_torquespring(body_B, body_F, psi_b - psi_f, spring_coeff=2.0,
-                     rest_angle=0, name='spine-torquespring-yaw')
+    if with_tail:
+        tail0 = Link3D('tail0', '-x', start_I=body_B.top_I,
+                       **params['tail0'], meta=['tail'])
+        tail1 = Link3D('tail1', '-x', start_I=tail0.bottom_I,
+                       **params['tail1'], meta=['tail'])
 
-    def def_leg(body: Link3D, front: bool, right: bool) -> Tuple[Link3D, Link3D]:
+        # TODO: maybe rather friction = 0 ?
+        add_foot(tail1, at='bottom', nsides=8, friction_coeff=0.1,
+                 GRFxy_max=0.1, GRFz_max=0.1)
+
+        # input torques to tail
+        body_B.add_hookes_joint(tail0, about='xy')
+        add_torque(body_B, tail0, about='xy', **params['tail_motor_params'])
+
+        tail0.add_hookes_joint(tail1, about='xy')
+        add_torque(tail0, tail1, about='xy', **params['tail_motor_params'])
+
+        # drag on tail
+        add_drag(tail0, at=tail0.Pb_I, use_dummy_vars=True)
+        add_drag(tail1, at=tail1.Pb_I, use_dummy_vars=True)
+
+    def def_leg(body: Link3D, front: bool, right: bool) -> Iterable[Link3D]:
         """Define a leg and attach it to the front/back right/left of `body`.
             Only really makes sense when `body` is aligned along the `x`-axis"""
         # maybe flip x (or y)
@@ -156,27 +169,48 @@ def model(params: Dict[str, Any]) -> Tuple[System3D, Callable[[System3D], None]]
 
         calf = Link3D('L'+suffix, '-z', start_I=thigh.bottom_I, **p['calf'],
                       meta=['leg', 'calf', 'front' if front else 'back', 'right' if right else 'left'])
-        add_foot(calf, at='bottom', nsides=8,
-                 friction_coeff=params['friction_coeff'])
 
+        # input torques
         body.add_hookes_joint(thigh, about='xy')
         add_torque(body, thigh, about='xy', **params['motor_params'])
 
         thigh.add_revolute_joint(calf, about='y')
         add_torque(thigh, calf, about='y', **params['motor_params'])
 
-        return thigh, calf
+        if front:
+            add_foot(calf, at='bottom', nsides=8,
+                     friction_coeff=params['friction_coeff'],
+                     GRFxy_max=100, GRFz_max=100)
+
+            return thigh, calf
+        else:
+            hock = Link3D('H'+suffix, '-z', start_I=calf.bottom_I, **p['hock'],
+                          meta=['leg', 'calf', 'front' if front else 'back', 'right' if right else 'left'])
+
+            calf.add_revolute_joint(hock, about='y')
+            add_torque(calf, hock, about='y', **params['motor_params'])
+
+            add_foot(hock, at='bottom', nsides=8,
+                     friction_coeff=params['friction_coeff'])
+
+            return thigh, calf, hock
 
     ufl, lfl = def_leg(body_F, front=True, right=False)
     ufr, lfr = def_leg(body_F, front=True, right=True)
-    ubl, lbl = def_leg(body_B, front=False, right=False)
-    ubr, lbr = def_leg(body_B, front=False, right=True)
+    ubl, lbl, hbl = def_leg(body_B, front=False, right=False)
+    ubr, lbr, hbr = def_leg(body_B, front=False, right=True)
 
     # combine into a robot
-    robot = System3D('3D quadruped', [body_B, body_F, tail0, tail1,
+    tail = [tail0, tail1] if with_tail else []  # type: ignore
+    robot = System3D('3D quadruped', [body_B, body_F, *tail,
                                       ufl, lfl, ufr, lfr,
-                                      ubl, lbl, ubr, lbr])
+                                      ubl, lbl, ubr, lbr,
+                                      hbl, hbr])
     return robot, add_pyomo_constraints
+
+
+def has_tail(robot: System3D) -> bool:
+    return any('tail' in link.name for link in robot.links)
 
 
 def add_pyomo_constraints(robot: System3D) -> None:
@@ -187,34 +221,42 @@ def add_pyomo_constraints(robot: System3D) -> None:
     assert robot.m is not None,\
         'robot does not have a pyomo model defined on it'
 
-    link_body_B, link_body_F, link_tail0, link_tail1, \
-        link_UFL, link_LFL, link_UFR, link_LFR, \
-        link_UBL, link_LBL, link_UBR, link_LBR = [
-            link['q'] for link in robot.links]
+    if has_tail(robot):
+        body_B, body_F, tail0, tail1, \
+            ufl, lfl, ufr, lfr, \
+            ubl, lbl, ubr, lbr, \
+            hbl, hbr = [link['q'] for link in robot.links]
+    else:
+        body_B, body_F, \
+            ufl, lfl, ufr, lfr, \
+            ubl, lbl, ubr, lbr, \
+            hbl, hbr = [link['q'] for link in robot.links]
+        tail0 = tail1 = None
 
     # spine can't bend too much:
     # it only has pitch and roll relative degrees of freedom. No need to constrain yaw
     constrain_rel_angle(robot.m, 'spine_pitch',
-                        -π/4, link_body_B[:, :, 'theta'], link_body_F[:, :, 'theta'], π/4)
+                        -π/4, body_B[:, :, 'theta'], body_F[:, :, 'theta'], π/4)
     constrain_rel_angle(robot.m, 'spine_roll',
-                        -π/4, link_body_B[:, :, 'phi'], link_body_F[:, :, 'phi'], π/4)
+                        -π/4, body_B[:, :, 'phi'], body_F[:, :, 'phi'], π/4)
 
     # tail can't go too crazy:
-    constrain_rel_angle(robot.m, 'tail_body_pitch',
-                        -π/3, link_body_B[:, :, 'theta'], link_tail0[:, :, 'theta'], π/3)
-    constrain_rel_angle(robot.m, 'tail_body_yaw',
-                        -π/3, link_body_B[:, :, 'phi'], link_tail0[:, :, 'phi'], π/3)
+    if tail0 is not None:
+        constrain_rel_angle(robot.m, 'tail_body_pitch',
+                            -π/3, body_B[:, :, 'theta'], tail0[:, :, 'theta'], π/3)
+        constrain_rel_angle(robot.m, 'tail_body_yaw',
+                            -π/3, body_B[:, :, 'phi'], tail0[:, :, 'phi'], π/3)
 
-    constrain_rel_angle(robot.m, 'tail_tail_pitch',
-                        -π/2, link_tail0[:, :, 'theta'], link_tail1[:, :, 'theta'], π/2)
-    constrain_rel_angle(robot.m, 'tail_tail_yaw',
-                        -π/2, link_tail0[:, :, 'phi'], link_tail1[:, :, 'phi'], π/2)
+        constrain_rel_angle(robot.m, 'tail_tail_pitch',
+                            -π/2, tail0[:, :, 'theta'], tail1[:, :, 'theta'], π/2)
+        constrain_rel_angle(robot.m, 'tail_tail_yaw',
+                            -π/2, tail0[:, :, 'phi'], tail1[:, :, 'phi'], π/2)
 
     # legs: hip abduction and knee
-    for body, thigh, calf, name in ((link_body_F, link_UFL, link_LFL, 'FL'),
-                                    (link_body_F, link_UFR, link_LFR, 'FR'),
-                                    (link_body_B, link_UBL, link_LBL, 'BL'),
-                                    (link_body_B, link_UBR, link_LBR, 'BR')):
+    for body, thigh, calf, hock, name in ((body_F, ufl, lfl, None, 'FL'),
+                                          (body_F, ufr, lfr, None, 'FR'),
+                                          (body_B, ubl, lbl, hbl, 'BL'),
+                                          (body_B, ubr, lbr, hbr, 'BR')):
         constrain_rel_angle(robot.m, name + '_hip_pitch',
                             -π/2, body[:, :, 'theta'], thigh[:, :, 'theta'], π/2)
         constrain_rel_angle(robot.m, name + '_hip_aduct',
@@ -223,6 +265,15 @@ def add_pyomo_constraints(robot: System3D) -> None:
         lo, up = (-π, 0) if name.startswith('B') else (0, π)
         constrain_rel_angle(robot.m, name + '_knee',
                             lo, thigh[:, :, 'theta'], calf[:, :, 'theta'], up)
+
+        if hock is not None:
+            lo, up = (0, π)
+            constrain_rel_angle(robot.m, name + '_foot',
+                                lo, calf[:, :, 'theta'], hock[:, :, 'theta'], up)
+
+            for th in hock[:, :, 'theta']:
+                th.setub(+π/3)
+                th.setlb(-π/3)
 
 # common functions
 
@@ -233,6 +284,10 @@ def high_speed_stop(robot: System3D, initial_vel: float, minimize_distance: bool
     import random
     from ..utils import copy_state_init
     from ..init_tools import add_costs
+
+    if not has_tail(robot):
+        from ..visual import warn
+        warn('Need to update high_speed_stop for no tail model!')
 
     nfe = len(robot.m.fe)
     ncp = len(robot.m.cp)
@@ -302,14 +357,15 @@ def high_speed_stop(robot: System3D, initial_vel: float, minimize_distance: bool
 
         # stop weird local minimum where it bounces
         for fe, cp in robot.indices(one_based=True):
-            if fe in range(10): continue
+            if fe in range(10):
+                continue
             # if fe > nfe/2: continue
 
             height = body['q'][fe, cp, 'z']
             height.setub(0.6)  # approx. leg height
-        
+
             for foot in feet(robot):
-                foot['foot_height'][fe,cp].setub(0.01)
+                foot['foot_height'][fe, cp].setub(0.01)
 
     # start at speed
     body['dq'][1, ncp, 'x'].fix(initial_vel)
@@ -346,29 +402,28 @@ def high_speed_stop(robot: System3D, initial_vel: float, minimize_distance: bool
                      distance_cost=0.0001*distance_cost)
 
 
-def periodic_gallop_test(robot,
+def periodic_gallop_test(robot: System3D,
                          avg_vel: float,
-                         feet: Iterable,
-                         foot_order_vals: Iterable,
+                         feet: Iterable['Foot3D'],
+                         foot_order_vals: Iterable[Tuple[int, int]],
                          init_from_dict: Optional[dict] = None,
                          at_angle_d: Optional[float] = None
                          ):
     """
     foot_order_vals = ((1, 7), (6, 13), (31, 38), (25, 32))  # 14 m/s
     """
-    import math
-    from math import radians
+    from math import sin, cos, radians
     import random
-    from ..utils import constrain_total_time
+    from .. import utils
     from ..foot import prescribe_contact_order
     from ..init_tools import sin_around_touchdown, add_costs
     from ..constrain import straight_leg, periodic
 
     nfe = len(robot.m.fe)
     ncp = len(robot.m.cp)
-    total_time = float((nfe-1)*robot.m.hm0.value)
-
-    constrain_total_time(robot.m, total_time=total_time)
+    m = utils.get_pyomo_model_or_error(robot)
+    total_time = utils.total_time(m)
+    utils.constrain_total_time(m, total_time=total_time)
 
     body = robot['base_B']
 
@@ -404,10 +459,12 @@ def periodic_gallop_test(robot,
             robot.links[0]['q'][fe, cp, 'theta'].value = rand(0, 15)
             robot.links[1]['q'][fe, cp, 'theta'].value = rand(0, 15, +10)
             # tail
-            robot.links[2]['q'][fe, cp, 'theta'].value = rand(0, 15, -10)
-            robot.links[3]['q'][fe, cp, 'theta'].value = rand(0, 15, -10)
+            if has_tail(robot):
+                robot.links[2]['q'][fe, cp, 'theta'].value = rand(0, 15, -10)
+                robot.links[3]['q'][fe, cp, 'theta'].value = rand(0, 15, -10)
 
-        for link in robot.links[4:]:  # legs
+        offset = 2 if has_tail(robot) else 0
+        for link in robot.links[(2+offset):]:  # legs
             for fe, cp in robot.indices(one_based=True):
                 link['q'][fe, cp, 'theta'].value = rand(0, 30)
 
@@ -415,7 +472,7 @@ def periodic_gallop_test(robot,
         body['q'][:, :, 'z'].value = 0.55
 
         # the feet:
-        prescribe_contact_order(feet, foot_order_vals)  # type: ignore
+        prescribe_contact_order(feet, foot_order_vals)
         for (touchdown, liftoff), foot in zip(foot_order_vals, [foot.name.rstrip('_foot') for foot in feet]):
             lower, upper = foot, 'U' + foot[1:]
             straight_leg(robot[upper]['q'], robot[lower]['q'],
@@ -423,7 +480,7 @@ def periodic_gallop_test(robot,
 
             angles = sin_around_touchdown(int((touchdown + liftoff)/2),
                                           len(robot.m.fe))
-            for fe, val in zip(robot.m.fe, angles):
+            for fe, val in zip(robot.m.fe, angles):  # type: ignore
                 robot[upper]['q'][fe, :, 'theta'].value = val
                 robot[lower]['q'][fe, :, 'theta'].value = val + \
                     radians(-15 if upper[1] == 'F' else 15)
@@ -437,9 +494,12 @@ def periodic_gallop_test(robot,
                 robot.m.hm[fe].value = robot.m.hm[fe].ub
     else:
         #ol.utils.info('Using an init from a dictionary file -- assuming its an Euler init')
-        for fed, cpd in robot.indices(one_based=True):
-            robot.init_from_dict_one_point(init_from_dict, fed=fed, cpd=cpd, fes=fed-1,
-                                           cps=0, skip_if_fixed=True, skip_if_not_None=False, fix=False)
+        if init_from_dict['ncp'] == 1:
+            for fed, cpd in robot.indices(one_based=True):
+                robot.init_from_dict_one_point(init_from_dict, fed=fed, cpd=cpd, fes=fed-1, cps=0,
+                                               skip_if_fixed=True, skip_if_not_None=False, fix=False)
+        else:
+            robot.init_from_dict(init_from_dict)
         if not (at_angle_d == 0 or at_angle_d is None):
             raise ValueError(
                 f'TODO: rotate init! Got at_angle_d = {at_angle_d}')
@@ -492,15 +552,15 @@ def periodic_gallop_test(robot,
         # average velocity init (overwrite the init!)
         for fe, cp in robot.indices(one_based=True, skipfirst=False):
             scale = total_time * (fe-1 + (cp-1)/ncp)/(nfe-1)
-            body['q'][fe, cp, 'x'].value = avg_vel * scale * math.cos(θᵣ)
-            body['dq'][fe, cp, 'x'].value = avg_vel * math.cos(θᵣ)
-            body['q'][fe, cp, 'y'].value = avg_vel * scale * math.sin(θᵣ)
-            body['dq'][fe, cp, 'y'].value = avg_vel * math.sin(θᵣ)
+            body['q'][fe, cp, 'x'].value = avg_vel * scale * cos(θᵣ)
+            body['dq'][fe, cp, 'x'].value = avg_vel * cos(θᵣ)
+            body['q'][fe, cp, 'y'].value = avg_vel * scale * sin(θᵣ)
+            body['dq'][fe, cp, 'y'].value = avg_vel * sin(θᵣ)
 
         #ol.visual.warn('Should probably also bound x, y!')
 
-        body['q'][nfe, ncp, 'x'].fix(total_time * avg_vel * math.cos(θᵣ))
-        body['q'][nfe, ncp, 'y'].fix(total_time * avg_vel * math.sin(θᵣ))
+        body['q'][nfe, ncp, 'x'].fix(total_time * avg_vel * cos(θᵣ))
+        body['q'][nfe, ncp, 'y'].fix(total_time * avg_vel * sin(θᵣ))
 
         # periodic
         periodic(robot, but_not=('x', 'y'))
@@ -620,3 +680,135 @@ def theoretical_peak_angle_velocity(stride_freq_Hz: float = 3.,
 #     plt.ylabel('Total power [W]')
 #     plt.xlabel('time [s]')
 #     plt.show()
+
+def full_tail_analysis(robotname: str, dataname: str, nfe: int):
+    import dill
+    import pathlib
+    cheetah: System3D
+    with open(f'robots-and-data/{robotname}.robot', 'rb') as f:
+        cheetah, add_pyomo_constraints = dill.load(f)
+
+    cheetah.make_pyomo_model(nfe=nfe, collocation='implicit_euler', total_time=0.30,
+                             vary_timestep_within=(0.5, 1.5), include_dynamics=False)
+
+    cheetah.init_from_dict(
+        dill.loads(pathlib.Path(dataname).read_bytes()),
+        skip_if_fixed=True, skip_if_not_None=False, fix=False)
+    relative_tail_velocity(cheetah)
+
+
+def relative_tail_velocity(cheetah: System3D):
+    from ..utils import get_vals
+    import matplotlib.pyplot as plt
+    from numpy import degrees, array  # type: ignore
+
+    base_B = cheetah['base_B']
+    tail0 = cheetah['tail0']
+    tail1 = cheetah['tail1']
+    m = cheetah.m
+    assert m is not None
+
+    for a, b in ((base_B, tail0), (tail0, tail1)):
+        # diff = {'psi': 0, 'theta': 0}
+        # for p in pair:
+        #     qset = p.pyomo_sets['q_set']
+        #     data = get_vals(p['q'], (qset,))
+        #     for ang in ('psi', 'theta'):
+        #         idx = list(qset).index(ang)
+        #         data_ang = data[:,0,idx]
+        #         diff[ang] += data_ang
+        # vela, velb = (get_vals(v['q'], (v.pyomo_sets['q_set'],)) for v in pair)
+
+        for ang in ('psi', 'theta'):
+            vela = array([a['q'][fe, cp, ang].value for fe,
+                          cp in cheetah.indices(one_based=True)])
+            velb = array([b['q'][fe, cp, ang].value for fe,
+                          cp in cheetah.indices(one_based=True)])
+            # diff = velb[:,0,idx] - vela[:,0,idx]
+            diff = vela - velb
+
+            plt.plot(degrees(vela))
+            plt.plot(degrees(velb))
+            plt.plot(degrees(diff))
+            plt.legend((a.name, b.name, 'diff'))
+            plt.title(f'{a.name} - {b.name}: {ang}, in degrees/sec')
+            plt.show()
+
+
+def observed_torque_limits(cheetah: System3D) -> Dict[str, Tuple[list, list]]:
+    from ..motor import torques
+    from ..utils import get_pyomo_model_or_error
+    import numpy as np
+
+    m = get_pyomo_model_or_error(cheetah)
+
+    out = {}
+
+    for motor in torques(cheetah):
+        Tc: np.ndarray = motor.save_data_to_dict()['Tc']
+
+        out[motor.name] = Tc
+        # out[motor.name] = (
+            #list(np.min(Tc, axis=0)),
+            #list(np.max(Tc, axis=0)),
+        # )
+
+    return out
+
+
+def union_of_torque_limits(cheetah: 'System3D', datanames: Iterable[str]) -> Dict[str, Tuple[list, list]]:
+    import dill
+    import pathlib
+
+    running_limits = None
+
+    for dataname in datanames:
+        cheetah.init_from_dict(dill.loads(
+            pathlib.Path(dataname).read_bytes()),
+            skip_if_fixed=True, skip_if_not_None=False, fix=False
+        )
+
+        limits = observed_torque_limits(cheetah)
+        _min = lambda lo,up: [min(l, u) for l,u in zip(lo,up)]
+        _max = lambda lo,up: [max(l, u) for l,u in zip(lo,up)]
+
+        if running_limits is None:
+            running_limits = limits
+        else:
+            for k, (lo, up) in limits.items():
+                rlo, rup = running_limits[k]
+                running_limits[k] = (_min(lo, rlo), _max(up, rup))
+    
+    assert running_limits is not None
+
+    return running_limits
+
+
+def gather_torque_data(cheetah: 'System3D', datanames: Iterable[str]) -> Dict[str, list]:
+    import dill
+    import pathlib
+    import numpy as np
+    from ..motor import torques
+
+    data = None
+
+    for dataname in datanames:
+        cheetah.init_from_dict(dill.loads(
+            pathlib.Path(dataname).read_bytes()),
+            skip_if_fixed=True, skip_if_not_None=False, fix=False
+        )
+
+        datapoint: Dict[str, np.ndarray] = {
+            motor.name: motor.save_data_to_dict()['Tc']
+            for motor in torques(cheetah)
+        }
+
+        if data is None:
+            data = {k: [] for k in datapoint.keys()}
+        
+        for k, v in datapoint.items():
+            data[k].append(v)
+    
+    assert data is not None
+
+    return data
