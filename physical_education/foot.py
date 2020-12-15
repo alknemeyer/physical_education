@@ -353,7 +353,8 @@ class Foot3D:
         plt.grid(True)
         plt.show()
 
-        fig, ax1 = plt.subplots()
+        fig = plt.figure()
+        ax1 = plt.subplot()
         plt.title('Foot height and ground reaction force in ' + self.name)
         plt.grid(True)
 

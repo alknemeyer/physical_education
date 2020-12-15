@@ -397,7 +397,8 @@ class Link3D:
             if self.is_base:  # plot x,y,z separately to angles
                 # typing this as 'Any' because the method accesses following give
                 # false warnings otherwise...
-                fig, ax1 = plt.subplots()
+                fig = plt.figure()
+                ax1 = plt.subplot()
                 ax1.plot(var[:, :3])
                 ax1.legend(list(q_set)[:3])
                 ax1.set_ylabel('positions [m]')

@@ -94,7 +94,7 @@ class _TorqueSpeedLimit:
 
         import matplotlib.pyplot as plt
         if _ax is None:
-            _, ax = plt.subplots()
+            ax = plt.subplot()
         else:
             ax = _ax
 
