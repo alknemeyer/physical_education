@@ -157,7 +157,7 @@ class System3D:
         if include_dynamics is True:
             if scale_forces_by is None:
                 total_mass = sum(link.mass for link in self.links)
-                scale_forces_by = total_mass
+                scale_forces_by = total_mass * 9.81
             m.force_scale = Param(initialize=scale_forces_by)
 
             @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))

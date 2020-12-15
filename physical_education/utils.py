@@ -202,10 +202,11 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
         vals = [random.random() for _ in range(len(vars_in_EOM))]
         for func in funcs:
             ret = func(vals)
-            assert type(ret) == float, "The function didn't return a float - it's likely "\
-                "because there are symbolic variables in the EOM "\
-                "which weren't specified in `vars_in_EOM`. Got: " + \
-                str(ret)
+            assert type(ret) == float, (
+                "The function didn't return a float - it's likely "
+                "because there are symbolic variables in the EOM "
+                "which weren't specified in `vars_in_EOM`. Got: " + str(ret)
+            )
 
     return funcs
 

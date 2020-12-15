@@ -330,3 +330,7 @@ class LineAnimation:
             del self.line
         except:
             pass
+
+
+# TODO: refactor plotting code from drag and foot into
+#       a QuiverAnimation class, similar to the one above

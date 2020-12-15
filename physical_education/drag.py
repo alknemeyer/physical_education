@@ -87,7 +87,7 @@ class Drag3D:
 
         self._plot_config: PlotConfig = {
             'plot_forces': True,
-            'force_scale': 1/10,
+            'force_scale': 1,
         }
 
     def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
@@ -207,6 +207,8 @@ class Drag3D:
         Fmag = self.pyomo_vars['Fmag']
         m = Fmag.model()
 
+        # if the force is deactivated, set the force magnitudes
+        # to zero, don't add other constraints, and early return
         if self.deactivated:
             for fe in m.fe:
                 for cp in m.cp:
@@ -317,7 +319,8 @@ class Drag3D:
         else:
             assert t is not None and t_arr is not None
             x, y, z, dx, dy, dz = [
-                np.interp(t, t_arr, self.plot_data[:, i]) for i in range(6)]
+                np.interp(t, t_arr, self.plot_data[:, i]) for i in range(6)
+            ]
 
         self.line = ax.quiver(
             x, y, z,    # <-- starting point of vector

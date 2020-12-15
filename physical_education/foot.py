@@ -20,8 +20,8 @@ PlotConfig = TypedDict('PlotConfig', plot_forces=bool, force_scale=float)
 
 class Foot3D:
     def __init__(self, name: str, Pb_I: Mat, nsides: Literal[4, 8],
-                 GRFxy_max: float = 30.,
-                 GRFz_max: float = 30.,
+                 GRFxy_max: float = 5.,
+                 GRFz_max: float = 5.,
                  friction_coeff: Optional[float] = None):
         self.name = name
         self.nsides = nsides
@@ -38,7 +38,7 @@ class Foot3D:
 
         self._plot_config: PlotConfig = {
             'plot_forces': True,
-            'force_scale': 1/10,
+            'force_scale': 1,
         }
 
     def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
@@ -69,19 +69,22 @@ class Foot3D:
                     bounds=(0, None))
 
         # penalty variables
-        contact_penalty = Var(m.fe, name='contact_penalty', bounds=(0, 10))
-        friction_penalty = Var(m.fe, name='friction_penalty', bounds=(0, 10))
-        slip_penalty = Var(m.fe, fric_set, name='slip_penalty', bounds=(0, 10))
+        contact_penalty = Var(m.fe, name='contact_penalty', bounds=(0, 1))
+        friction_penalty = Var(m.fe, name='friction_penalty', bounds=(0, 1))
+        slip_penalty = Var(m.fe, fric_set, name='slip_penalty', bounds=(0, 1))
 
         self.pyomo_params: Dict[str, Param] = {
             'friction_coeff': friction_coeff
         }
         self.pyomo_sets: Dict[str, Set] = {
-            'xy_set': xy_set, 'fric_set': fric_set,
+            'xy_set': xy_set,
+            'fric_set': fric_set,
         }
         self.pyomo_vars: Dict[str, Var] = {
             'GRFxy': GRFxy, 'GRFz': GRFz,
-            'foot_height': foot_height, 'foot_xy_vel': foot_xy_vel, 'gamma': gamma,
+            'foot_height': foot_height,
+            'foot_xy_vel': foot_xy_vel,
+            'gamma': gamma,
             'contact_penalty': contact_penalty,
             'friction_penalty': friction_penalty,
             'slip_penalty': slip_penalty,
@@ -276,8 +279,8 @@ class Foot3D:
         cp = 1
         force_scale = self._plot_config['force_scale']
 
-        for fe0, d in enumerate(data):
-            fe = fe0 + 1
+        for fe0, d in enumerate(data):  # fe0 = zero-based indexing
+            fe = fe0 + 1                # fe = one-based indexed
 
             x, y, z = [f(d) for f in self.foot_pos_func]
 
@@ -307,7 +310,8 @@ class Foot3D:
         else:
             assert t is not None and t_arr is not None
             x, y, z, dx, dy, dz = [
-                np.interp(t, t_arr, self.plot_data[:, i]) for i in range(6)]
+                np.interp(t, t_arr, self.plot_data[:, i]) for i in range(6)
+            ]
 
         self.line = ax.quiver(
             x, y, z,    # <-- starting point of vector
@@ -332,8 +336,8 @@ class Foot3D:
         fric_set = self.pyomo_sets['fric_set']
         contact_penalty = utils.get_vals(self.pyomo_vars['contact_penalty'])
         friction_penalty = utils.get_vals(self.pyomo_vars['friction_penalty'])
-        slip_penalty = utils.get_vals(
-            self.pyomo_vars['slip_penalty'], (fric_set,))
+        slip_penalty = utils.get_vals(self.pyomo_vars['slip_penalty'],
+                                      (fric_set,))
 
         # TODO: plot GRFxy as an xy-thing? or individual line plots?
         # GRFxy = utils.get_vals(self.pyomo_vars['GRFxy'], (fric_set,))
@@ -366,8 +370,8 @@ class Foot3D:
         ax2 = ax1.twinx()
         GRFz = utils.get_vals(self.pyomo_vars['GRFz'], tuple())
         # the color trick below is so that they don't both use the same color
-        ax2.plot(fe, GRFz, label='$GRFz$', color=next(
-            ax1._get_lines.prop_cycler)['color'])
+        color = next(ax1._get_lines.prop_cycler)['color']
+        ax2.plot(fe, GRFz, label='$GRFz$', color=color)
         ax2.set_ylabel('Force [Nm/body_weight]')
 
         fig.legend(loc='center')
@@ -378,7 +382,7 @@ class Foot3D:
         return f'Foot3D(name="{self.name}", nsides={self.nsides}, friction_coeff={self.friction_coeff})'
 
 
-def add_foot(link, at: str, name: Optional[str] = None, **kwargs):
+def add_foot(link, at: Literal['top', 'bottom'], name: Optional[str] = None, **kwargs):
     """
         `at` is usually `self.bottom_I`. Eg:
         >>> foot.add_foot(link, at='bottom')
@@ -386,7 +390,7 @@ def add_foot(link, at: str, name: Optional[str] = None, **kwargs):
     name = utils.get_name(name, [link], 'foot')
 
     assert at in ('top', 'bottom'), \
-        "Can only add ground contacts at top or bottom of foot"
+       f"Can only add ground contacts at top or bottom of foot. Got: at={at}"
 
     Pb_I = link.bottom_I if at == 'bottom' else link.top_I
     foot = Foot3D(str(name), Pb_I, **kwargs)

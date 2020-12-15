@@ -10,28 +10,29 @@ from ..spring import add_torquespring
 from ..damper import add_torquedamper
 
 
-
 parameters = {
-    'model-6': {
-        'source': """
-            A model of cheetah 6 from Functional anatomy of the cheetah (Acinonyx jubatus) forelimb and hindlimb
-            doi: 10.1111/j.1469-7580.2011.01344.x and 10.1111/j.1469-7580.2010.01310.x
-        """,
-        'body_B': {'mass': 17., 'radius': 0.08, 'length': 0.41},
-        'body_F': {'mass': 8., 'radius': 0.08, 'length': 0.21},
-        'tail0': {'mass': 0.4, 'radius': 0.005, 'length': 0.38},
-        'tail1': {'mass': 0.2, 'radius': 0.005, 'length': 0.38},
-        'front': {
-            'thigh': {'mass': 0.171, 'radius': 0.012, 'length': 0.254},
-            'calf':  {'mass': 0.068, 'radius': 0.005, 'length': 0.247},
-        },
-        'back': {
-            'thigh': {'mass': 0.210, 'radius': 0.010, 'length': 0.281},
-            'calf':  {'mass': 0.160, 'radius': 0.011, 'length': 0.287},
-        },
-        'friction_coeff': 1.3,
-        'motor_params': {'torque_bounds': (-2., 2.), 'no_load_speed': 50.},
-    },
+    # # The model below is terribly out of date. If needed, manually
+    # # uncomment + test it!
+    # 'model-6': {
+    #     'source': """
+    #         A model of cheetah 6 from Functional anatomy of the cheetah (Acinonyx jubatus) forelimb and hindlimb
+    #         doi: 10.1111/j.1469-7580.2011.01344.x and 10.1111/j.1469-7580.2010.01310.x
+    #     """,
+    #     'body_B': {'mass': 17., 'radius': 0.08, 'length': 0.41},
+    #     'body_F': {'mass': 8., 'radius': 0.08, 'length': 0.21},
+    #     'tail0': {'mass': 0.4, 'radius': 0.005, 'length': 0.38},
+    #     'tail1': {'mass': 0.2, 'radius': 0.005, 'length': 0.38},
+    #     'front': {
+    #         'thigh': {'mass': 0.171, 'radius': 0.012, 'length': 0.254},
+    #         'calf':  {'mass': 0.068, 'radius': 0.005, 'length': 0.247},
+    #     },
+    #     'back': {
+    #         'thigh': {'mass': 0.210, 'radius': 0.010, 'length': 0.281},
+    #         'calf':  {'mass': 0.160, 'radius': 0.011, 'length': 0.287},
+    #     },
+    #     'friction_coeff': 1.3,
+    #     'motor_params': {'torque_bounds': (-2., 2.), 'no_load_speed': 50.},
+    # },
     'mean-male': {
         'source': """
         Parameters for the 'mean' (X) cheetah from
@@ -84,8 +85,9 @@ parameters = {
             'hock':  {'mass': 0.060*1.2, 'radius': 0.011, 'length': 0.287 * 1.1*(24.5/(33+24.5))},
         },
         'friction_coeff': 1.3,
-        'motor_params': {'torque_bounds': (-5., 5.), 'no_load_speed': 50.},
-        'tail_motor_params': {'torque_bounds': (-2., 2.), 'no_load_speed': 50.}
+        # measured in terms of body weight
+        'motor_params': {'torque_bounds': (-0.5, 0.5), 'no_load_speed': 50.},
+        'tail_motor_params': {'torque_bounds': (-0.2, 0.2), 'no_load_speed': 50.}
     },
 }
 
@@ -688,6 +690,7 @@ def full_tail_analysis(robotname: str, dataname: str, nfe: int):
     with open(f'robots-and-data/{robotname}.robot', 'rb') as f:
         cheetah, add_pyomo_constraints = dill.load(f)
 
+    # random model - we'll init from dict anyway
     cheetah.make_pyomo_model(nfe=nfe, collocation='implicit_euler', total_time=0.30,
                              vary_timestep_within=(0.5, 1.5), include_dynamics=False)
 
@@ -735,55 +738,6 @@ def relative_tail_velocity(cheetah: System3D):
             plt.show()
 
 
-def observed_torque_limits(cheetah: System3D) -> Dict[str, Tuple[list, list]]:
-    from ..motor import torques
-    from ..utils import get_pyomo_model_or_error
-    import numpy as np
-
-    m = get_pyomo_model_or_error(cheetah)
-
-    out = {}
-
-    for motor in torques(cheetah):
-        Tc: np.ndarray = motor.save_data_to_dict()['Tc']
-
-        out[motor.name] = Tc
-        # out[motor.name] = (
-            #list(np.min(Tc, axis=0)),
-            #list(np.max(Tc, axis=0)),
-        # )
-
-    return out
-
-
-def union_of_torque_limits(cheetah: 'System3D', datanames: Iterable[str]) -> Dict[str, Tuple[list, list]]:
-    import dill
-    import pathlib
-
-    running_limits = None
-
-    for dataname in datanames:
-        cheetah.init_from_dict(dill.loads(
-            pathlib.Path(dataname).read_bytes()),
-            skip_if_fixed=True, skip_if_not_None=False, fix=False
-        )
-
-        limits = observed_torque_limits(cheetah)
-        _min = lambda lo,up: [min(l, u) for l,u in zip(lo,up)]
-        _max = lambda lo,up: [max(l, u) for l,u in zip(lo,up)]
-
-        if running_limits is None:
-            running_limits = limits
-        else:
-            for k, (lo, up) in limits.items():
-                rlo, rup = running_limits[k]
-                running_limits[k] = (_min(lo, rlo), _max(up, rup))
-    
-    assert running_limits is not None
-
-    return running_limits
-
-
 def gather_torque_data(cheetah: 'System3D', datanames: Iterable[str]) -> Dict[str, list]:
     import dill
     import pathlib
@@ -805,10 +759,10 @@ def gather_torque_data(cheetah: 'System3D', datanames: Iterable[str]) -> Dict[st
 
         if data is None:
             data = {k: [] for k in datapoint.keys()}
-        
+
         for k, v in datapoint.items():
             data[k].append(v)
-    
+
     assert data is not None
 
     return data
