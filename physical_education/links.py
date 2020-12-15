@@ -186,7 +186,7 @@ class Link3D:
         q = pyo.Var(m.fe, m.cp, q_set, name='q', bounds=(-100, 100))
         dq = pyo.Var(m.fe, m.cp, q_set, name='dq', bounds=(-1000, 1000))
         # the bounds are more or less arbitrary!
-        ddq = pyo.Var(m.fe, m.cp, q_set, name='ddq', bounds=(-5000, 5000))
+        ddq = pyo.Var(m.fe, m.cp, q_set, name='ddq', bounds=(-10_000, 10_000))
 
         # constraint (reaction) forces (multiples of BW)
         Fr = pyo.Var(m.fe, m.cp, Fr_set, name='Fr', bounds=(-10, 10))
@@ -452,9 +452,17 @@ class Link3D:
         return f'Link3D(name="{self.name}", isbase={self.is_base}, mass={self.mass}kg, length={self.length}m, radius={self.radius}m{nodes})'
 
 
+if TYPE_CHECKING:
+    from pyomo.core.base.indexed_component_slice import _IndexedComponent_slice
+
+
 def constrain_rel_angle(m: pyo.ConcreteModel, constr_name: str,
-                        lowerbound: float, angle1: Iterable,
-                        angle2: Iterable, upperbound: float):
+                        lowerbound: float, angle1: '_IndexedComponent_slice',
+                        angle2: '_IndexedComponent_slice', upperbound: float):
+    """
+    >>> constrain_rel_angle(robot.m, 'knee',
+    ...                     0, thigh[:, :, 'theta'], calf[:, :, 'theta'], π/2)
+    """
     # TODO: maybe switch to something like:
     # >>> diffs = [ang1-ang2 for ang1,ang2 in zip(angle1, angle2)]
     # or use this:
@@ -485,3 +493,14 @@ def constrain_rel_angle(m: pyo.ConcreteModel, constr_name: str,
 
     name = f'rel_angle_{constr_name}'
     setattr(m, name, pyo.Constraint(m.fe, m.cp, ('+', '-'), rule=func))
+
+    # def func(m: pyo.ConcreteModel, ang1, ang2, bound: str):
+    #     # make sure fe/cp match up for both links
+    #     assert ang1.index()[:2] == ang2.index()[:2]
+    #     if bound == '+':
+    #         return ang1 - ang2 <= upperbound
+    #     elif bound == '-':
+    #         return lowerbound <= ang1 - ang2
+
+    # name = f'rel_angle_{constr_name}'
+    # setattr(m, name, pyo.Constraint(angle1, angle2, ('+', '-'), rule=func))
