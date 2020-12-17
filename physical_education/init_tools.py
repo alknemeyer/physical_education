@@ -104,7 +104,7 @@ def add_costs(robot: 'System3D',
               include_transport_cost: bool,
               include_torque_cost: bool,
               transport_axis: str = 'x',
-              scale: float = 0.001,
+              scale: float = 0.01,
               **other_costs) -> dict:  # time cost? distance cost?
     from pyomo.environ import Objective
     m = utils.get_pyomo_model_or_error(robot)
@@ -116,16 +116,16 @@ def add_costs(robot: 'System3D',
 
     torque_cost = (
         motor.torque_squared_penalty(robot)*scale
-        if include_torque_cost else 0
     )
 
     transport_cost = (
         torque_cost / body['q'][nfe, ncp, transport_axis]*scale
-        if include_transport_cost else 0
     )
 
     pen_cost = feet_penalty(robot)
-    robot.m.cost = Objective(expr=pen_cost + transport_cost + torque_cost
+    robot.m.cost = Objective(expr=pen_cost
+                             + (transport_cost if include_transport_cost else 0)
+                             + (torque_cost if include_torque_cost else 0)
                              + sum(v for v in other_costs.values()))
 
     return {'penalty': pen_cost, 'transport': transport_cost, 'torque': torque_cost, **other_costs}

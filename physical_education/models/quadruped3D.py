@@ -79,15 +79,32 @@ parameters = {
         },
         'back': {
             'thigh': {'mass': 0.210*1.2, 'radius': 0.010, 'length': 0.281},
-            # based on ratio's
+            # based on ratios
             'calf':  {'mass': 0.100*1.2, 'radius': 0.011, 'length': 0.287 * 1.1*(33/(33+24.5))},
             # from Liams model
             'hock':  {'mass': 0.060*1.2, 'radius': 0.011, 'length': 0.287 * 1.1*(24.5/(33+24.5))},
         },
         'friction_coeff': 1.3,
-        # measured in terms of body weight
-        'motor_params': {'torque_bounds': (-0.5, 0.5), 'no_load_speed': 50.},
-        'tail_motor_params': {'torque_bounds': (-0.2, 0.2), 'no_load_speed': 50.}
+
+        # measured in terms of body weight, based on the observed limits
+        # of energy efficient gallops and C-turns at 8, 14 and 20 m/s
+        # for this model
+        'motor': {
+            'spine': {'torque_bounds': (-0.7, 0.7), 'no_load_speed': 50.},
+            'spine-tail0': {'torque_bounds': (-0.25, 0.25), 'no_load_speed': 50.},
+            'tail0-tail1': {'torque_bounds': (-0.2, 0.2), 'no_load_speed': 50.},
+            'front': {
+                'hip-pitch': {'torque_bounds': (-0.5, 0.6), 'no_load_speed': 50.},
+                'hip-abduct': {'torque_bounds': (-0.5, 0.6), 'no_load_speed': 50.},
+                'knee': {'torque_bounds': (-0.5, 0.4), 'no_load_speed': 50.},
+            },
+            'back': {
+                'hip-pitch': {'torque_bounds': (-0.6, 0.6), 'no_load_speed': 50.},
+                'hip-abduct': {'torque_bounds': (-0.4, 0.5), 'no_load_speed': 50.},
+                'knee': {'torque_bounds': (-0.1, 0.5), 'no_load_speed': 50.},
+                'ankle': {'torque_bounds': (-0.4, 0.05), 'no_load_speed': 50.},
+            },
+        },
     },
 }
 
@@ -105,8 +122,9 @@ def model(params: Dict[str, Any], with_tail: bool) -> Tuple[System3D, Callable[[
     body_F = Link3D('base_F', '+x', start_I=body_B.bottom_I, **params['body_F'],
                     meta=['spine', 'front'])
 
-    body_B.add_hookes_joint(body_F, about='xyz')
-    add_torque(body_B, body_F, about='xyz', **params['motor_params'])
+    # input torques for roll, pitch and yaw of the spine
+    # body_B.add_hookes_joint(body_F, about='xyz')
+    add_torque(body_B, body_F, about='xyz', **params['motor']['spine'])
 
     # spring/damper forces on spine
     phi_b, th_b, psi_b = body_B.q[3:]
@@ -140,12 +158,13 @@ def model(params: Dict[str, Any], with_tail: bool) -> Tuple[System3D, Callable[[
         add_foot(tail1, at='bottom', nsides=8, friction_coeff=0.1,
                  GRFxy_max=0.1, GRFz_max=0.1)
 
-        # input torques to tail
+        # input torques to tail - pitch and yaw
         body_B.add_hookes_joint(tail0, about='xy')
-        add_torque(body_B, tail0, about='xy', **params['tail_motor_params'])
+        add_torque(body_B, tail0, about='xy', **params['motor']['spine-tail0'])
 
+        # torques in the middle of the tail - pitch and yaw
         tail0.add_hookes_joint(tail1, about='xy')
-        add_torque(tail0, tail1, about='xy', **params['tail_motor_params'])
+        add_torque(tail0, tail1, about='xy', **params['motor']['tail0-tail1'])
 
         # drag on tail
         add_drag(tail0, at=tail0.Pb_I, use_dummy_vars=True)
@@ -164,36 +183,45 @@ def model(params: Dict[str, Any], with_tail: bool) -> Tuple[System3D, Callable[[
             body.Rb_I @ Mat([mfx(body.length/2), mfy(body.radius), 0])
         suffix = ('F' if front else 'B') + ('R' if right else 'L')
 
-        p = params['front'] if front else params['back']
+        frontorback_str = 'front' if front else 'back'
+        rightorleft_str = 'right' if right else 'left'
+        p = params[frontorback_str]
 
         thigh = Link3D('U'+suffix, '-z', start_I=start_I, **p['thigh'],
-                       meta=['leg', 'thigh', 'front' if front else 'back', 'right' if right else 'left'])
+                       meta=['leg', 'thigh', frontorback_str, rightorleft_str])
 
         calf = Link3D('L'+suffix, '-z', start_I=thigh.bottom_I, **p['calf'],
-                      meta=['leg', 'calf', 'front' if front else 'back', 'right' if right else 'left'])
+                      meta=['leg', 'calf', frontorback_str, rightorleft_str])
 
-        # input torques
+        # next, all of the muscles and their respective limits
+        muscleparams = params['motor'][frontorback_str]
+
+        # input torques: hip pitch and abduct
         body.add_hookes_joint(thigh, about='xy')
-        add_torque(body, thigh, about='xy', **params['motor_params'])
+        add_torque(body, thigh, name=f'{frontorback_str}-{rightorleft_str}-hip-pitch',
+                   about='x', **muscleparams['hip-pitch'])
+        add_torque(body, thigh, name=f'{frontorback_str}-{rightorleft_str}-hip-abduct',
+                   about='y', **muscleparams['hip-abduct'])
 
         thigh.add_revolute_joint(calf, about='y')
-        add_torque(thigh, calf, about='y', **params['motor_params'])
+        add_torque(thigh, calf, about='y', **muscleparams['knee'])
 
         if front:
             add_foot(calf, at='bottom', nsides=8,
                      friction_coeff=params['friction_coeff'],
-                     GRFxy_max=100, GRFz_max=100)
+                     GRFxy_max=5, GRFz_max=5)
 
             return thigh, calf
         else:
             hock = Link3D('H'+suffix, '-z', start_I=calf.bottom_I, **p['hock'],
-                          meta=['leg', 'calf', 'front' if front else 'back', 'right' if right else 'left'])
+                          meta=['leg', 'calf', frontorback_str, rightorleft_str])
 
             calf.add_revolute_joint(hock, about='y')
-            add_torque(calf, hock, about='y', **params['motor_params'])
+            add_torque(calf, hock, about='y', **muscleparams['ankle'])
 
             add_foot(hock, at='bottom', nsides=8,
-                     friction_coeff=params['friction_coeff'])
+                     friction_coeff=params['friction_coeff'],
+                     GRFxy_max=5, GRFz_max=5)
 
             return thigh, calf, hock
 
@@ -495,7 +523,6 @@ def periodic_gallop_test(robot: System3D,
                 # but [short/long] timesteps while on the ground
                 robot.m.hm[fe].value = robot.m.hm[fe].ub
     else:
-        #ol.utils.info('Using an init from a dictionary file -- assuming its an Euler init')
         if init_from_dict['ncp'] == 1:
             for fed, cpd in robot.indices(one_based=True):
                 robot.init_from_dict_one_point(init_from_dict, fed=fed, cpd=cpd, fes=fed-1, cps=0,
@@ -517,10 +544,11 @@ def periodic_gallop_test(robot: System3D,
             psi.setlb(radians(-10 + (at_angle_d or 0)))
 
     # bound theta
+    # stop the back from going so high!
     for link in robot.links[:2]:  # body
         for fe, cp in robot.indices(one_based=True):
-            link['q'][fe, cp, 'theta'].setub(radians(+60))
-            link['q'][fe, cp, 'theta'].setlb(radians(-60))
+            link['q'][fe, cp, 'theta'].setub(radians(+45))
+            link['q'][fe, cp, 'theta'].setlb(radians(-45))
 
     for link in robot.links[2:]:  # everything else
         for fe, cp in robot.indices(one_based=True):
