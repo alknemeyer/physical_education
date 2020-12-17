@@ -25,6 +25,7 @@ from .links import Link3D
 from .system import System3D
 from .utils import norm, get_name
 from . import utils
+from . import visual
 
 if TYPE_CHECKING:
     from .variable_list import VariableList
@@ -187,7 +188,7 @@ class Drag3D:
         assert self.name == data['name']
         for attr in ('coeff',):
             if getattr(self, attr) != data[attr]:
-                utils.warn(
+                visual.warn(
                     f'Attribute "{attr}" of link "{self.name}" is not the same as the data: {getattr(self, attr)} != {data[attr]}')
 
         v = self.pyomo_vars
@@ -340,7 +341,7 @@ class Drag3D:
             pass
 
     def plot(self):
-        utils.warn('Drag3D.plot() not implemented!', once=True)
+        visual.warn('Drag3D.plot() not implemented!', once=True)
 
     def __repr__(self) -> str:
         return f'Drag3D(name="{self.name}", coeff={self.coeff}, active={not self.deactivated})'

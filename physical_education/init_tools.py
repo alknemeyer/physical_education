@@ -6,6 +6,7 @@ from typing import Callable, Iterable, Optional, TYPE_CHECKING
 from .foot import feet, feet_penalty
 from . import motor
 from . import utils
+from . import visual
 
 
 if TYPE_CHECKING:
@@ -57,7 +58,7 @@ def sin_around_touchdown(fe: int, nfe: int) -> np.ndarray:
 
 def bound_penalty_and_add_transport_cost(robot: 'System3D', penalty_limit: float):
     from pyomo.environ import Objective
-    utils.info('Deleting previous cost function')
+    visual.info('Deleting previous cost function')
     robot.m.del_component('cost')
 
     nfe = len(robot.m.fe)

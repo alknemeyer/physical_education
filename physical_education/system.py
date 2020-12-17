@@ -205,7 +205,7 @@ class System3D:
 
         # TODO: ignore this warning when accounting for differing number of finite elements
         if not m.hm0.value == data['hm0']:
-            utils.warn(
+            visual.warn(
                 f'init_from_dict_one_point: self.hm0 = {m.hm0.value} != {data["hm0"]} = data["hm0"]', once=True
             )
 

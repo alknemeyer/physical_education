@@ -319,7 +319,7 @@ class Link3D:
         assert self.name == data['name'] and self.is_base == data['is_base']
         for attr in ('meta', 'mass', 'length', 'radius'):
             if getattr(self, attr) != data[attr]:
-                utils.warn(
+                visual.warn(
                     f'Attribute "{attr}" of link "{self.name}" is not the same as the data: {getattr(self, attr)} != {data[attr]}')
 
         for qstr in ('q', 'dq', 'ddq'):

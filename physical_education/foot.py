@@ -10,6 +10,7 @@ from sympy import Matrix as Mat
 from .system import System3D
 from .links import Link3D
 from . import utils
+from . import visual
 
 
 if TYPE_CHECKING:
@@ -133,7 +134,7 @@ class Foot3D:
         assert self.name == data['name']
         for attr in ('nsides', 'friction_coeff'):
             if getattr(self, attr) != data[attr]:
-                utils.warn(
+                visual.warn(
                     f'Attribute "{attr}" of link "{self.name}" is not the same as the data: {getattr(self, attr)} != {data[attr]}')
 
         v = self.pyomo_vars

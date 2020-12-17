@@ -6,6 +6,7 @@ from .. import utils
 from pyomo.environ import Objective
 from ..foot import feet_penalty
 from ..motor import torque_squared_penalty
+from .. import visual
 
 
 def drop_test(robot, *, z_rot: float, min_torque: bool, initial_height: float = 1.) -> Dict[str, Any]:
@@ -21,7 +22,7 @@ def drop_test(robot, *, z_rot: float, min_torque: bool, initial_height: float = 
                      '3D quadruped', '3D prismatic monoped')
 
     if not robot.name in tested_models:
-        utils.warn(
+        visual.warn(
             f'This robot configuration ("{robot.name}") hasn\'t been tested!\n'
             f'Tested models are: {tested_models}')
 
