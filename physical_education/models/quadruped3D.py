@@ -264,11 +264,12 @@ def add_pyomo_constraints(robot: System3D) -> None:
         tail0 = tail1 = None
 
     # spine can't bend too much:
-    # it only has pitch and roll relative degrees of freedom. No need to constrain yaw
     constrain_rel_angle(robot.m, 'spine_pitch',
                         -π/4, body_B[:, :, 'theta'], body_F[:, :, 'theta'], π/4)
     constrain_rel_angle(robot.m, 'spine_roll',
                         -π/4, body_B[:, :, 'phi'], body_F[:, :, 'phi'], π/4)
+    constrain_rel_angle(robot.m, 'spine_yaw',
+                        -π/4, body_B[:, :, 'psi'], body_F[:, :, 'psi'], π/4)
 
     # tail can't go too crazy:
     if tail0 is not None:
