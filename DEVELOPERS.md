@@ -31,6 +31,26 @@ Other libraries for doing things in 3D include:
    * https://github.com/K3D-tools/K3D-jupyter/tree/master
    * https://github.com/rougier/matplotlib-3d
    * https://matplotlib.org/matplotblog/posts/custom-3d-engine/
+   * https://lorensen.github.io/VTKExamples/site/Python/Utilities/Animation/ https://github.com/marcomusy/vedo/blob/master/examples/notebooks/volumetric/tensors.ipynb (also can't seem to save videos)
+   * https://threejs.org/docs/index.html#examples/en/exporters/ColladaExporter (use pythreejs https://pythreejs.readthedocs.io/en/stable/introduction.html - eg: https://github.com/jupyter-widgets/pythreejs/blob/master/examples/Animation.ipynb) (can't seem to save videos)
+   * or maybe pydy?
+      * https://github.com/pydy/pydy-tutorial-human-standing/blob/master/notebooks/n08_visualization.ipynb
+      * https://github.com/pydy/pydy/tree/master/pydy/viz
+   * pyqtgraph (doesn't seem to work in notebooks)
+
+BUT the folloing restrictions apply:
+   * works using a remote computing setup (like eg JupyterLab)
+   * have the ability to save videos (eg. `.mp4`)
+   * not too difficult to work with (preferably has primitives for cylinders, rectangles, etc)
+
+If using matplotlib, check out:
+* https://matplotlib.org/matplotblog/posts/custom-3d-engine/
+* https://github.com/rougier/matplotlib-3d/blob/master/doc/README.md
+
+Plotly:
+* https://community.plotly.com/t/basic-3d-cylinders/27990
+* https://plotly.com/python/streamtube-plot/
+* BUT can't seem to save videos of animations?
 
 ## Use the `logging` module instead of/in addition to my stuff
 Would be very simple -- just replace some of the calls to `print` in `visual.py` with `logger.info`. See my [blog post](https://alknemeyer.github.io/technical/embedded-comms-with-python-part-2/#setting-up-logging) on how you might do this
