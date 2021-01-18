@@ -330,6 +330,8 @@ class System3D:
             ax.set_ylim(*y)
             ax.set_zlim(*z)
 
+            visual.plotgrass(ax, *x, *y)
+
         visual.set_view(ax, along=view_along)
         ground = add_ground(((0, 0), (0, 0)))
 

@@ -58,7 +58,8 @@ def get_useful_info(f: FrameType) -> str:
 
     if 'physical_education' in filepath:
         # eg: '/home/alex/alknemeyer-msc/python/physical_education/visual'
-        filepath = filepath[filepath.index('physical_education'):].replace('/', '.')
+        idx = filepath.index('physical_education')
+        filepath = filepath[idx:].replace('/', '.')
     elif 'ipython' in filepath:
         # eg: 'ipython-input-34-ce5fcbaca0c1'
         filepath = filepath[:filepath.rfind('-')]
@@ -212,6 +213,25 @@ def plot3d_setup(figsize=(10, 10),
     return fig, ax, add_ground
 
 
+def plotgrass(ax, xlo: float, xup: float, ylo: float, yup: float,
+              npoints: int = 30,
+              color: str = 'orange',
+              height: float = 0.2,
+              alpha: float = 0.5):
+    def getvec():
+        return np.random.random((npoints, npoints, 1))
+
+    x = getvec()*(xup-xlo) + xlo
+    y = getvec()*(yup-ylo) + ylo
+    z = getvec()*0
+
+    u = (getvec() - 0.5)/5
+    v = (getvec() - 0.5)/5
+    w = getvec()*height
+
+    return ax.quiver(x, y, z, u, v, w, arrow_length_ratio=0, color=color, alpha=alpha)
+
+
 def update_3d_line(line, pt1: List[float], pt2: List[float]):
     """Update data in a 3D line, passed as two points"""
     line.set_data([[pt1[0], pt2[0]],
@@ -290,7 +310,7 @@ class LineAnimation:
         from .utils import lambdify_EOM
         self.pos1func = lambdify_EOM(pos1, sp_variables)
         self.pos2func = lambdify_EOM(pos2, sp_variables)
-    
+
     def animation_setup(self, fig, ax, data: List[List[float]]):
         self.line = ax.plot([], [], [],
                             linewidth=1,
@@ -298,11 +318,11 @@ class LineAnimation:
 
         self.plot_data = [np.empty((len(data), 3)),
                           np.empty((len(data), 3))]
-        
+
         for idx, d in enumerate(data):  # xyz of top and bottom of the link
             self.plot_data[0][idx, :] = [f(d) for f in self.pos1func]
             self.plot_data[1][idx, :] = [f(d) for f in self.pos2func]
-    
+
     def animation_update(self, fig, ax,
                          fe: Optional[int] = None,
                          t: Optional[float] = None,
@@ -313,10 +333,10 @@ class LineAnimation:
             pos2_xyz = self.plot_data[1][fe-1]
         else:
             pos1_xyz = [np.interp(t, t_arr, self.plot_data[0][:, i])
-                       for i in range(3)]
+                        for i in range(3)]
             pos2_xyz = [np.interp(t, t_arr, self.plot_data[1][:, i])
-                          for i in range(3)]
-        
+                        for i in range(3)]
+
         update_3d_line(self.line, pos1_xyz, pos2_xyz)
 
         if track is True:
