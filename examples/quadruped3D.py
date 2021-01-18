@@ -112,9 +112,13 @@ parameters = {
 
 def model(params: Dict[str, Any], with_tail: bool) -> Tuple[System3D, Callable[[System3D], None]]:
     """
+    Defines a quadruped model based off a cheetah (see `cheetah-model.png`).
+
     Roughly 400 000 operations in the equations of motion without simplification,
-    and 142 520 if simplified with
+    and 140 000 if simplified with
     >>> robot.calc_eom(simp_func = lambda x: utils.parsimp(x, nprocs = 14))
+
+    Note that the numbers are probably out of date at this point.
     """
     # create front and back links of body and tail
     body_B = Link3D('base_B', '+x', base=True, **params['body_B'],
