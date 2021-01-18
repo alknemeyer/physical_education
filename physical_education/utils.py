@@ -67,6 +67,16 @@ def euler_321(phi: SymOrFloat, theta: SymOrFloat, psi: SymOrFloat) -> Mat:
 # utils to find equations of motion ##########################################
 
 
+def vec(*args):
+    """
+    Slightly cleaner way of creating small vectors. Instead of,
+    >>> sp.Matrix([x, y, z])
+    you can use:
+    >>> vec(x, y, z)
+    """
+    return sp.Matrix(args)
+
+
 def skew_symmetric(Rx_I: Mat, q: Mat, dq: Mat) -> Mat:
     """Rx_I is the 3x3 rotation from body frame `x` to the inertial `I`
     `q` is a vector of symbolic variables
@@ -164,7 +174,13 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
 
         >>> lambdify_EOM(EOM, vars_in_EOM[:-3])  # not all vars in EOM
         AssertionError: The function didn't return a float - it's likely ...
-        """
+
+    `func_map` is a dictionary with strings of maths functions as keys
+    (eg. `sin`, `sqrt`, ...). Values can be Python functions which return
+    Pyomo objects (`pyomo.environ.sin`, ...) or numeric values (`math.pi`).
+    This is necessary because Pyomo doesn't otherwise know what to do with
+    eg. `sympy.sin`, `sympy.pi`, and so on
+    """
     import pyomo.environ
     import random
     import math
@@ -264,6 +280,14 @@ def flatten(ls: Iterable[Iterable[T]]) -> List[T]:
     Flatten an iterable of iterables of items into a list of items
     """
     return [item for sublist in ls for item in sublist]
+
+
+def base_link_of(model: System3D) -> Link3D:
+    """
+    Get the base link of a model (ie, the link which defines `x`,
+    `y` and `z`. There should only be one!
+    """
+    return next(iter(link for link in model.links if link.is_base))
 
 # interpolation ##############################################################
 
