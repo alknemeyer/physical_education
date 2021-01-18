@@ -409,6 +409,7 @@ def default_solver(*,
                    OF_print_frequency_time: int = 10,
                    output_file: str = './.ipopt-log.txt',
                    warm_start_init_point: bool = True,
+                   OF_hessian_approximation: str = 'limited-memory',
                    **kwargs):
     """
     Tested linear solvers include 'mumps', 'ma77', 'ma97', 'ma86' and 'pardiso'. ma86 seems
@@ -430,8 +431,10 @@ def default_solver(*,
         values of primal and dual variables are given (e.g., from a previous optimization
         of a related problem.)
 
-    OF_hessian_approximation: default 'exact'
-        Set to 'limited-memory' for L-GBFS. Default is 'exact'
+    OF_hessian_approximation: default 'limited-memory'
+        Set to 'limited-memory' for L-GBFS, 'exact' for exact calculation of Hessian
+        NOTE: IPOPT sets the default to 'exact', but 'limited-memory' is generally the
+        right choice for the types of systems one deals with using the library.
 
     OF_accept_every_trial_step: default 'no'
         Setting this option to "yes" essentially disables the line search and makes the
