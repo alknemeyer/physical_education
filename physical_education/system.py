@@ -92,7 +92,7 @@ class System3D:
 
         visual.info(f'Number of operations in EOM is {sp.count_ops(eom)}')
 
-        # TODO: the lambdifying step actually takes quite long -- any way to speed it up?
+        # the lambdifying step actually takes quite long
         from pyomo.environ import atan
         func_map = {
             'sqrt': lambda x: (x+1e-9)**(1/2),

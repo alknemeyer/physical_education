@@ -477,7 +477,9 @@ def constrain_rel_angle(m: pyo.ConcreteModel, constr_name: str,
     ang_2_lo = iter(angle2)
 
     # _fe and _cp are unused
-    # TODO: switch to pyomo.environ.inequality!
+    # pyomo.environ.inequality is unused, but seems like it would be
+    # for this. I recall due to some bug with it.
+    # Could be worth sorting that out? 
     def func(m: pyo.ConcreteModel, _fe, _cp, bound: str):
         if bound == '+':
             ang1 = next(ang_1_up)

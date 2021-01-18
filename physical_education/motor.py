@@ -152,7 +152,6 @@ class Motor3D:
     def add_input_torques_at(self, otherlink: 'Link3D', about: str):
         """ Add input torques between two links, about axis `about` of `self`
         >>> link_body.add_input_torques_at(link_UFL, about='xy')
-        TODO: THINK MORE ABOUT WHAT THIS REALLY MEANS!
         """
         assert all(axis in 'xyz' for axis in about)
 
@@ -249,8 +248,6 @@ class Motor3D:
 
         if cps is None:
             cps = cpd - 1
-
-        # assert self.name == data['name']  # TODO: uncomment!
 
         if len(data['Tc']) > 0:
             for idx, T in enumerate(self.pyomo_sets['Tc_set']):

@@ -134,6 +134,8 @@ def model(params: Dict[str, Any], with_tail: bool) -> Tuple[System3D, Callable[[
                         (th_b - th_f,  'pitch'),
                         (psi_b - psi_f,  'yaw')]:
         # TODO: actually find these by initialising to 0.5 and bounding to (0.1, 10.)
+        #       the current fixed values are sort of arbitrary (based on a paper)
+        #       about humans
         add_torquespring(body_B, body_F, angles, spring_coeff=0.5,
                          #  spring_coeff_lims=(0.1, 10.),
                          rest_angle=0,
@@ -155,7 +157,8 @@ def model(params: Dict[str, Any], with_tail: bool) -> Tuple[System3D, Callable[[
         tail1 = Link3D('tail1', '-x', start_I=tail0.bottom_I,
                        **params['tail1'], meta=['tail'])
 
-        # TODO: maybe rather friction = 0 ?
+        # friction coefficient of 0.1 is arbitrary. Worth setting to 0
+        # in case it speeds things up?
         add_foot(tail1, at='bottom', nsides=8, friction_coeff=0.1,
                  GRFxy_max=0.1, GRFz_max=0.1)
 
