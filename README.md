@@ -23,7 +23,7 @@ On to the code:
 ```python
 import physical_education as pe
 
-# create a link called 'based', aligned along the x-axis.
+# create a link called 'base', aligned along the x-axis.
 # by default, we use Euler-321 for angle orientation
 base = pe.links.Link3D(
     'base', '+x', base=True,
@@ -149,7 +149,7 @@ robot.post_solve({'penalty': pen_cost})
 robot.animate(view_along='x', t_scale=3, track='base')
 
 # let's also view along an elevation of -120 degrees, and
-# an azimouth of 35 degrees
+# an azimuth of 35 degrees
 robot.animate(view_along=(35, -120), track='base')
 ```
 
@@ -228,23 +228,4 @@ and then start your project. Good luck, and please open an issue if anything is 
 
 
 ## Documentation
-outside of commented code/examples, is currently non-existant. I'm finishing off my dissertation now, but will work on that afterwards
-
-<!-- ## Structure of the codebase
-### `system.py`
-- hm, hm0, pyo_variables, sp_variables, eom
-
-### `links.py`
-- q, dq, ddq
-- euler321 default
-
-### Nodes
-### Other useful functions
-
-## Summaries of important libraries
-### sympy
-### pyomo
-### matplotlib
-### dill
-### types
-#### stub files -->
+outside of commented code/examples, is currently non-existent. I'm finishing off my dissertation now, but intend on working on that afterwards. I have a chapter on this library which serves as a nice intro to everything.
