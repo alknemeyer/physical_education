@@ -1,12 +1,13 @@
 """
-Some tasks for the robots in the models folder.
+Tasks for the example models.
 """
 from typing import Dict, Any
-from .. import utils
 from pyomo.environ import Objective
-from ..foot import feet_penalty
-from ..motor import torque_squared_penalty
-from .. import visual
+
+from ..physical_education import utils
+from ..physical_education.foot import feet_penalty
+from ..physical_education.motor import torque_squared_penalty
+from ..physical_education import visual
 
 
 def drop_test(robot, *, z_rot: float, min_torque: bool, initial_height: float = 1.) -> Dict[str, Any]:

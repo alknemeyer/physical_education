@@ -1,13 +1,14 @@
 from typing import Any, Dict, Iterable, Optional, Tuple, Callable
 from math import pi as π
 from sympy import Matrix as Mat
-from ..links import Link3D, constrain_rel_angle
-from ..system import System3D
-from ..foot import add_foot, feet, Foot3D
-from ..motor import add_torque
-from ..drag import add_drag
-from ..spring import add_torquespring
-from ..damper import add_torquedamper
+
+from ..physical_education.links import Link3D, constrain_rel_angle
+from ..physical_education.system import System3D
+from ..physical_education.foot import add_foot, feet, Foot3D
+from ..physical_education.motor import add_torque
+from ..physical_education.drag import add_drag
+from ..physical_education.spring import add_torquespring
+from ..physical_education.damper import add_torquedamper
 
 
 parameters = {
@@ -313,11 +314,11 @@ def high_speed_stop(robot: System3D, initial_vel: float, minimize_distance: bool
                     gallop_data: Optional[dict] = None, offset: int = 0):
     import math
     import random
-    from ..utils import copy_state_init
-    from ..init_tools import add_costs
+    from ..physical_education.utils import copy_state_init
+    from ..physical_education.init_tools import add_costs
 
     if not has_tail(robot):
-        from ..visual import warn
+        from ..physical_education.visual import warn
         warn('Need to update high_speed_stop for no tail model!')
 
     nfe = len(robot.m.fe)
@@ -445,10 +446,10 @@ def periodic_gallop_test(robot: System3D,
     """
     from math import sin, cos, radians
     import random
-    from .. import utils
-    from ..foot import prescribe_contact_order
-    from ..init_tools import sin_around_touchdown, add_costs
-    from ..constrain import straight_leg, periodic
+    from ..physical_education import utils
+    from ..physical_education.foot import prescribe_contact_order
+    from ..physical_education.init_tools import sin_around_touchdown, add_costs
+    from ..physical_education.constrain import straight_leg, periodic
 
     nfe = len(robot.m.fe)
     ncp = len(robot.m.cp)
@@ -730,7 +731,7 @@ def full_tail_analysis(robotname: str, dataname: str, nfe: int):
 
 
 def relative_tail_velocity(cheetah: System3D):
-    from ..utils import get_vals
+    from ..physical_education.utils import get_vals
     import matplotlib.pyplot as plt
     from numpy import degrees, array  # type: ignore
 
@@ -771,7 +772,8 @@ def gather_torque_data(cheetah: 'System3D', datanames: Iterable[str]) -> Dict[st
     import dill
     import pathlib
     import numpy as np
-    from ..motor import torques
+
+    from ..physical_education.motor import torques
 
     data = None
 
