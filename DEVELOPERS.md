@@ -73,3 +73,6 @@ physical_education/
 ```
 
 Otherwise, you might decide that abstracting away 2D just is more work than it's worth, and it might even not be a good idea (see [this talk](https://www.deconstructconf.com/2019/dan-abramov-the-wet-codebase) and why you _shouldn't_ abstract everything)
+
+## Document sources of equations, data, etc
+An embarrassing amount of the equations, theory, and so on simply isn't documented properly. The maths in particular appears as equations without context. It would be good to cite sources for the complex stuff, and proviled more detailed explanations for everything else. Some of the things are quite routine (eg generalized forces) -- they could be explained in a `theory.md` document?
