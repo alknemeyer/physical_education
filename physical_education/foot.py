@@ -536,7 +536,7 @@ def set_timing(nfe: int, *, time: Optional[float] = None, initial: Optional[Tupl
     from IPython.display import display
     display(HBox([slider, button]))
 
-    return lambda: {'done': done, 'values': slider.value}
+    return lambda: {'done': done, 'values': slider.value}  # type: ignore
 
 
 def prescribe_contact_order(feet: Iterable[Foot3D], ground_timings: Iterable[Tuple[int, int]],
