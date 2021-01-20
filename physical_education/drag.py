@@ -154,7 +154,7 @@ class Drag3D:
             self.pyomo_vars.values(),
         ])
 
-    def get_pyomo_vars(self, fe: int, cp: int):
+    def get_pyomo_vars(self, fe: int, cp: int) -> List[Var]:
         """fe, cp are one-based!"""
         # NB: keep in sync with get_sympy_vars()!!
         v = self.pyomo_vars

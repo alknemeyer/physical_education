@@ -8,7 +8,7 @@ import numpy as np
 import pyomo.environ as pyo
 from sympy import Matrix as Mat
 from . import utils, symdef, visual
-from .template import Node
+from .node import Node
 from .variable_list import VariableList
 
 PlotConfig = TypedDict('PlotConfig', shape=str, linewidth=float, color=str)
@@ -479,7 +479,7 @@ def constrain_rel_angle(m: pyo.ConcreteModel, constr_name: str,
     # _fe and _cp are unused
     # pyomo.environ.inequality is unused, but seems like it would be
     # for this. I recall due to some bug with it.
-    # Could be worth sorting that out? 
+    # Could be worth sorting that out?
     def func(m: pyo.ConcreteModel, _fe, _cp, bound: str):
         if bound == '+':
             ang1 = next(ang_1_up)
