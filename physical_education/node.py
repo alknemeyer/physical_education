@@ -12,12 +12,15 @@ if TYPE_CHECKING:
     from .variable_list import VariableList
 
 
+# commented out sections represent optional stuff
+
+
 class Node(Protocol):
     name: str
     pyomo_params: Dict[str, Param]
     pyomo_sets: Dict[str, Set]
     pyomo_vars: Dict[str, Var]
-    _plot_config: Dict[str, Any]
+    # _plot_config: Dict[str, Any]
 
     def __init__(self, name: str, *args, **kwargs) -> None:
         """
@@ -27,12 +30,14 @@ class Node(Protocol):
 
         Also, add `assert` statements for common errors
         """
+        ...
 
     def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
         """
-        Calculate the Q input mapping defined by this component,
-        and return it
+        Calculate the force input mapping (`Q`) defined by this
+        component, and return it
         """
+        ...
 
     def add_vars_to_pyomo_model(self, m: ConcreteModel) -> None:
         """
@@ -42,6 +47,7 @@ class Node(Protocol):
         If the component has sub components (eg a link having a foot),
         make sure to call the method on them too
         """
+        ...
 
     def get_pyomo_vars(self, fe: int, cp: int) -> List[Var]:
         """
@@ -59,12 +65,14 @@ class Node(Protocol):
         ]
         ```
         """
+        ...
 
     def get_sympy_vars(self) -> List[sp.Symbol]:
         """
         Get the sympy variables defined by this model.
         NB: keep in sync with get_pyomo_vars()
         """
+        ...
 
     def save_data_to_dict(self) -> Dict[str, Any]:
         """
@@ -73,6 +81,7 @@ class Node(Protocol):
 
         NB keep in sync with `init_from_dict_one_point`
         """
+        ...
 
     def init_from_dict_one_point(self, data: Dict[str, Any],
                                  fed: int, cpd: int,
@@ -84,6 +93,7 @@ class Node(Protocol):
 
         NB keep in sync with `save_data_to_dict`
         """
+        ...
 
     def add_equations_to_pyomo_model(self,
                                      sp_variables: List[sp.Symbol],
@@ -94,13 +104,15 @@ class Node(Protocol):
         The sympy variables are passed so that lambda functions can be
         created. `sp_variables` will correspond to `pyo_variables`
         """
+        ...
 
     def __getitem__(self, varname: str) -> Var:
         """
         Shorthand for `self.pyomo_vars[varname]`
         """
+        ...
 
-    def animation_setup(self, fig, ax, data: List[List[float]]):
+    def animation_setup(self, fig, ax, data: List[List[float]]) -> None:
         """
         Run setup code code an animation, like geometric calculations
         and initial setup of plot objects
@@ -110,17 +122,19 @@ class Node(Protocol):
 
         TODO: explain how `data` is structured
         """
+        ...
 
     def animation_update(self, fig, ax,
                          fe: Optional[int] = None,
                          t: Optional[float] = None,
                          t_arr: Optional[np.ndarray] = None,
-                         track: bool = False):
+                         track: bool = False) -> None:
         """
         Updates plot objects defined in `animation_setup`
 
         TODO: explain what the args are
         """
+        ...
 
     def cleanup_animation(self, fig, ax):
         """
@@ -135,14 +149,17 @@ class Node(Protocol):
             pass
         ```
         """
+        ...
 
-    def plot(self):
+    def plot(self, *args, **kwargs):
         """
         Produce line plots of the data held by the object - eg. position vs time
 
         Possibly altered by options in `self._plot_config`, which is why this
         method accepts no arguments
         """
+        ...
 
     def __repr__(self) -> str:
-        return f'TemplateBody(name="{self.name}")'
+        ...
+        # return f'TemplateBody(name="{self.name}")'
