@@ -15,10 +15,10 @@
 
 from typing import Tuple, Callable
 
-from ..physical_education.links import Link3D, constrain_rel_angle
-from ..physical_education.system import System3D
-from ..physical_education.foot import add_foot
-from ..physical_education.motor import add_torque
+from physical_education.links import Link3D, constrain_rel_angle
+from physical_education.system import System3D
+from physical_education.foot import add_foot
+from physical_education.motor import add_torque
 
 
 def model() -> Tuple[System3D, Callable[[System3D], None]]:

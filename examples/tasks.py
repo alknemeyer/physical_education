@@ -4,10 +4,10 @@ Tasks for the example models.
 from typing import Dict, Any
 from pyomo.environ import Objective
 
-from ..physical_education import utils
-from ..physical_education.foot import feet_penalty
-from ..physical_education.motor import torque_squared_penalty
-from ..physical_education import visual
+from physical_education import utils
+from physical_education.foot import feet_penalty
+from physical_education.motor import torque_squared_penalty
+from physical_education import visual
 
 
 def drop_test(robot, *, z_rot: float, min_torque: bool, initial_height: float = 1.) -> Dict[str, Any]:
