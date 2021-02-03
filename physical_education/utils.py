@@ -282,7 +282,7 @@ def flatten(ls: Iterable[Iterable[T]]) -> List[T]:
     return [item for sublist in ls for item in sublist]
 
 
-def base_link_of(model: System3D) -> Link3D:
+def base_link_of(model: 'System3D') -> 'Link3D':
     """
     Get the base link of a model (ie, the link which defines `x`,
     `y` and `z`. There should only be one!
