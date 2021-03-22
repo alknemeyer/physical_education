@@ -239,9 +239,10 @@ class Link3D:
         setattr(m, self.name + '_collocation_dq',
                 pyo.Constraint(m.fe, m.cp, q_set, rule=collocation_func(dq, ddq)))
 
-        # while we're here, also make equations for the top and bottom of the link:
-        self.lineanimation = visual.LineAnimation(
-            self.top_I, self.bottom_I, sp_variables)
+        # # while we're here, also make equations for the top and bottom of the link:
+        # self.lineanimation = visual.LineAnimation(
+        #     self.top_I, self.bottom_I, sp_variables)
+        self._sp_variables = sp_variables
 
         for node in self.nodes.values():
             node.add_equations_to_pyomo_model(
@@ -347,9 +348,8 @@ class Link3D:
             self._plot_config['color'] = color
 
         if shape is not None:
-            assert shape in ('line', 'box')
+            assert shape in ('line', 'cylinder')
             self._plot_config['shape'] = shape
-            raise NotImplementedError('Get round to adding this!')
 
         if linewidth is not None:
             self._plot_config['linewidth'] = linewidth
@@ -357,11 +357,19 @@ class Link3D:
         return self
 
     def animation_setup(self, fig, ax, data: List[List[float]]):
+        if self._plot_config['shape'] == 'line':
+            self.lineanimation = visual.LineAnimation(
+                self.top_I, self.bottom_I, self._sp_variables)
+        else:
+            assert self.radius is not None
+            self.lineanimation = visual.CylinderAnimation(
+                self.top_I, self.bottom_I, self._sp_variables, radius=self.radius, nsides=20)
+
         self.lineanimation.animation_setup(fig, ax, data)
 
-        line = self.lineanimation.line
-        line.set_linewidth(self._plot_config['linewidth'])
-        line.set_color(self._plot_config['color'])
+        # line = self.lineanimation.line
+        # line.set_linewidth(self._plot_config['linewidth'])
+        # line.set_color(self._plot_config['color'])
 
         for node in self.nodes.values():
             node.animation_setup(fig, ax, data)
@@ -370,6 +378,13 @@ class Link3D:
                          t: Optional[float] = None, t_arr: Optional[np.ndarray] = None,
                          track: bool = False):
         self.lineanimation.animation_update(fig, ax, fe, t, t_arr, track)
+
+        line = self.lineanimation.line
+        try:
+            line.set_linewidth(self._plot_config['linewidth'])
+        except:
+            pass
+        line.set_color(self._plot_config['color'])
 
         for node in self.nodes.values():
             node.animation_update(fig, ax, fe=fe, t=t, t_arr=t_arr)
@@ -427,12 +442,6 @@ class Link3D:
                 plt.gcf().savefig(
                     f'{save_to}{title.split()[1]}-{self.name}.pdf')
             else:
-                plt.plot(var)
-                plt.legend(q_set)
-                plt.grid(True)
-                plt.title(title)
-                plt.xlabel('Finite element')
-                plt.ylabel('angles [rad]')
                 plt.show()
 
         ncp = len(m.cp)

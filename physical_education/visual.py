@@ -352,5 +352,155 @@ class LineAnimation:
             pass
 
 
+def data_for_3d_cylinder(top, bottom, radius: float, nsides: int):
+    from numpy import sin, cos, pi, arcsin  # type: ignore
+
+    nsides += 1
+    tx, ty, tz = top = np.array(top)
+    bx, by, bz = bottom = np.array(bottom)
+
+    # zero to 2pi
+    z2pi = np.linspace(0, 2*pi, nsides)
+
+    x_grid = np.array([bx + sin(z2pi)*radius,
+                       tx + sin(z2pi)*radius])
+    y_grid = np.array([by + cos(z2pi)*radius,
+                       ty + cos(z2pi)*radius])
+#     z_grid = np.array([bz + scale*radius*0,
+#                        tz + scale*radius*0])
+
+    # adjust height of cylinder
+    theta = np.linspace(0, 2*pi, nsides)
+    scale = sin(z2pi)
+    z = np.linspace(bz, tz, 2)
+    theta_grid, z_grid = np.meshgrid(theta, z)
+    n = top - bottom
+    b = np.array([0, 0, 1])
+    th_to_xy_plane_rad = arcsin(
+        b.dot(n) / np.linalg.norm(b) / np.linalg.norm(n)
+    )
+    z_grid = np.repeat(np.array([bz, tz]),
+                       x_grid.shape[1]).reshape(x_grid.shape)
+    z_grid += scale*radius * sin(th_to_xy_plane_rad)
+
+    return x_grid, y_grid, z_grid
+
+
+class CylinderAnimation:
+    def __init__(self, pos1: sp.Matrix, pos2: sp.Matrix,
+                 sp_variables: List[sp.Symbol],
+                 radius: float,
+                 nsides: int = 10) -> None:
+        assert pos1.shape == (3, 1)
+        assert pos2.shape == (3, 1)
+
+        from .utils import lambdify_EOM
+        self.pos1func = lambdify_EOM(pos1, sp_variables)
+        self.pos2func = lambdify_EOM(pos2, sp_variables)
+        self.radius = radius
+        self.nsides = nsides
+
+    def animation_setup(self, fig, ax, data: List[List[float]]):
+        self.plot_data = [np.empty((len(data), 3)),
+                          np.empty((len(data), 3))]
+
+        for idx, d in enumerate(data):  # xyz of top and bottom of the link
+            self.plot_data[0][idx, :] = [f(d) for f in self.pos1func]
+            self.plot_data[1][idx, :] = [f(d) for f in self.pos2func]
+
+    def animation_update(self, fig, ax,
+                         fe: Optional[int] = None,
+                         t: Optional[float] = None,
+                         t_arr: Optional['np.ndarray'] = None,
+                         track: bool = False):
+        if fe is not None:
+            pos1_xyz = self.plot_data[0][fe-1]
+            pos2_xyz = self.plot_data[1][fe-1]
+        else:
+            pos1_xyz = [np.interp(t, t_arr, self.plot_data[0][:, i])
+                        for i in range(3)]
+            pos2_xyz = [np.interp(t, t_arr, self.plot_data[1][:, i])
+                        for i in range(3)]
+
+        if hasattr(self, 'line'):
+            self.line.remove()
+            del self.line
+
+        Xc, Yc, Zc = data_for_3d_cylinder(
+            pos1_xyz, pos2_xyz, radius=self.radius, nsides=self.nsides)
+        self.line = ax.plot_surface(Xc, Yc, Zc, color='darkgray')
+
+        if track is True:
+            lim = 1.0
+            if pos1_xyz[2] < lim:
+                pos1_xyz = (float(pos1_xyz[0]), float(pos1_xyz[1]), lim)
+            track_pt(ax, pos1_xyz, lim=lim)  # type: ignore
+
+    def cleanup_animation(self, fig, ax):
+        try:
+            self.line.remove()
+            del self.line
+        except:
+            pass
+
+
 # TODO: refactor plotting code from drag and foot into
 #       a QuiverAnimation class, similar to the one above
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .system import System3D
+
+def stitch_together_animation(robot: 'System3D', data: List[dict]):
+    # exclude the last finite element of each of these
+    nfe = sum(d['nfe'] for d in data) - len(data)
+
+    total_time = sum(sum(d['hm0']*d['hm'][1:]) for d in data)
+
+    robot.make_pyomo_model(nfe=nfe, collocation='implicit_euler', total_time=total_time, vary_timestep_within=(0.5, 1.5), include_dynamics=False)
+
+    def rot2d(θ):
+        return np.array([
+            [ np.cos(θ), np.sin(θ)],  # type: ignore
+            [-np.sin(θ), np.cos(θ)],  # type: ignore
+        ])
+    
+    nfe_otg = 1
+    bodyq = robot.links[0]['q']
+
+    def inc(linkq, var: str):
+        val = linkq[nfe_otg-1, 1, var].value
+    
+        for fe in range(nfe_otg, nfe_otg + dnfe):
+            linkq[fe, 1, var].value += val
+
+    for idx, d in enumerate(data):
+        dnfe = d['nfe'] - 1
+
+        for fes in range(dnfe):
+            robot.init_from_dict_one_point(d, fed=nfe_otg+fes, cpd=1, fes=fes, cps=0,
+                                        skip_if_fixed=False, skip_if_not_None=False, fix=False)
+
+        if idx != 0:
+            for link in robot.links:
+                inc(link['q'], 'psi')
+
+            inc(bodyq, 'x')
+            inc(bodyq, 'y')
+
+            var = lambda fe, coord: bodyq[nfe_otg+fe, 1, coord]
+            prevx = var(0, 'x').value
+            prevy = var(0, 'y').value
+
+            # rotate the [x,y] positions and then increment from previous values
+            for fe in range(dnfe):
+                psi = var(fe, 'psi').value
+                arr =  np.array([var(fe, 'x').value - prevx, var(fe, 'y').value - prevy])
+                xy = rot2d(psi).T @ arr
+
+                var(fe, 'x').value = xy[0] + prevx
+                var(fe, 'y').value = xy[1] + prevy
+
+        nfe_otg += dnfe
+    
+    return robot
