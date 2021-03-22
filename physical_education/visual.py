@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 from types import FrameType
 from typing import Optional, Tuple, List, Set, Union, Dict, Any
 from contextlib import contextmanager
@@ -447,9 +448,9 @@ class CylinderAnimation:
 # TODO: refactor plotting code from drag and foot into
 #       a QuiverAnimation class, similar to the one above
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .system import System3D
+
 
 def stitch_together_animation(robot: 'System3D', data: List[dict]):
     # exclude the last finite element of each of these
@@ -457,20 +458,21 @@ def stitch_together_animation(robot: 'System3D', data: List[dict]):
 
     total_time = sum(sum(d['hm0']*d['hm'][1:]) for d in data)
 
-    robot.make_pyomo_model(nfe=nfe, collocation='implicit_euler', total_time=total_time, vary_timestep_within=(0.5, 1.5), include_dynamics=False)
+    robot.make_pyomo_model(nfe=nfe, collocation='implicit_euler', total_time=total_time,
+                           vary_timestep_within=(0.5, 1.5), include_dynamics=False)
 
     def rot2d(θ):
         return np.array([
-            [ np.cos(θ), np.sin(θ)],  # type: ignore
+            [np.cos(θ), np.sin(θ)],  # type: ignore
             [-np.sin(θ), np.cos(θ)],  # type: ignore
         ])
-    
+
     nfe_otg = 1
     bodyq = robot.links[0]['q']
 
     def inc(linkq, var: str):
         val = linkq[nfe_otg-1, 1, var].value
-    
+
         for fe in range(nfe_otg, nfe_otg + dnfe):
             linkq[fe, 1, var].value += val
 
@@ -479,7 +481,7 @@ def stitch_together_animation(robot: 'System3D', data: List[dict]):
 
         for fes in range(dnfe):
             robot.init_from_dict_one_point(d, fed=nfe_otg+fes, cpd=1, fes=fes, cps=0,
-                                        skip_if_fixed=False, skip_if_not_None=False, fix=False)
+                                           skip_if_fixed=False, skip_if_not_None=False, fix=False)
 
         if idx != 0:
             for link in robot.links:
@@ -488,19 +490,20 @@ def stitch_together_animation(robot: 'System3D', data: List[dict]):
             inc(bodyq, 'x')
             inc(bodyq, 'y')
 
-            var = lambda fe, coord: bodyq[nfe_otg+fe, 1, coord]
+            def var(fe, coord): return bodyq[nfe_otg+fe, 1, coord]
             prevx = var(0, 'x').value
             prevy = var(0, 'y').value
 
             # rotate the [x,y] positions and then increment from previous values
             for fe in range(dnfe):
                 psi = var(fe, 'psi').value
-                arr =  np.array([var(fe, 'x').value - prevx, var(fe, 'y').value - prevy])
+                arr = np.array([var(fe, 'x').value - prevx,
+                                var(fe, 'y').value - prevy])
                 xy = rot2d(psi).T @ arr
 
                 var(fe, 'x').value = xy[0] + prevx
                 var(fe, 'y').value = xy[1] + prevy
 
         nfe_otg += dnfe
-    
+
     return robot

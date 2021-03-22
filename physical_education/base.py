@@ -83,7 +83,7 @@ class SimpleForceBase3D:
 
         if symname is None:
             symname = paramname
-        
+
         sym = sp.Symbol(symname + '_{%s}' % self.name)
 
         self._dummyvars.append(

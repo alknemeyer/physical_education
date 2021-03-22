@@ -118,7 +118,7 @@ def add_torquespring(link: 'Link3D', otherlink: 'Link3D',
                      relative_angle: 'sp.Expression',
                      spring_coeff: float,
                      rest_angle: float,
-                     spring_coeff_lims: Optional[Tuple[float,float]] = None,
+                     spring_coeff_lims: Optional[Tuple[float, float]] = None,
                      name: Optional[str] = None):
     name = get_name(name, [link, otherlink], 'torquespring')
 

@@ -398,7 +398,7 @@ def add_foot(link, at: Literal['top', 'bottom'], name: Optional[str] = None, **k
     name = utils.get_name(name, [link], 'foot')
 
     assert at in ('top', 'bottom'), \
-       f"Can only add ground contacts at top or bottom of foot. Got: at={at}"
+        f"Can only add ground contacts at top or bottom of foot. Got: at={at}"
 
     Pb_I = link.bottom_I if at == 'bottom' else link.top_I
     foot = Foot3D(str(name), Pb_I, **kwargs)

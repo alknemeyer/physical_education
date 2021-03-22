@@ -32,7 +32,7 @@ class TorqueDamper3D(SimpleForceBase3D):
     name: str
     relative_velocity: 'sp.Expression' = field(repr=False)
     damping_coeff: float
-    damping_coeff_lims: Optional[Tuple[float,float]]
+    damping_coeff_lims: Optional[Tuple[float, float]]
 
     def __post_init__(self):
         super().__init__()
@@ -71,7 +71,7 @@ class TorqueDamper3D(SimpleForceBase3D):
 def add_torquedamper(link: 'Link3D', otherlink: 'Link3D',
                      relative_velocity: 'sp.Expression',
                      damping_coeff: float,
-                     damping_coeff_lims: Optional[Tuple[float,float]] = None,
+                     damping_coeff_lims: Optional[Tuple[float, float]] = None,
                      name: Optional[str] = None):
 
     name = get_name(name, [link, otherlink], 'torquedamper')
