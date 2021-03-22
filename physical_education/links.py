@@ -380,7 +380,7 @@ class Link3D:
         for node in self.nodes.values():
             node.cleanup_animation(fig, ax)
 
-    def plot(self) -> None:
+    def plot(self, save_to: Optional[str] = None) -> None:
         m = self.pyomo_vars['q'].model()
 
         q_set = self.pyomo_sets['q_set']
@@ -412,10 +412,20 @@ class Link3D:
                 ax2.legend(list(q_set)[3:])
                 ax2.set_ylabel('angles [rad]')
 
-                plt.grid(True)
-                plt.title(title)
-                fig.tight_layout()  # otherwise the right y-label is slightly clipped
-                plt.show()
+            else:
+                fig = plt.figure()
+                ax = plt.subplot()
+                ax.plot(var)
+                ax.legend(q_set)
+                plt.xlabel('Finite element')
+                plt.ylabel('angles [rad]')
+
+            plt.grid(True)
+            plt.title(title)
+            plt.tight_layout()
+            if save_to is not None:
+                plt.gcf().savefig(
+                    f'{save_to}{title.split()[1]}-{self.name}.pdf')
             else:
                 plt.plot(var)
                 plt.legend(q_set)
@@ -445,7 +455,7 @@ class Link3D:
             pass
 
         for node in self.nodes.values():
-            node.plot()
+            node.plot(save_to=save_to)
 
     def __repr__(self) -> str:
         nodes = ',\n    '.join(str(node) for node in self.nodes.values())

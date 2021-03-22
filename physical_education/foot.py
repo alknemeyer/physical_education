@@ -328,7 +328,7 @@ class Foot3D:
         except:
             pass
 
-    def plot(self):
+    def plot(self, save_to: Optional[str] = None):
         m = self.pyomo_vars['GRFxy'].model()
         fe = list(range(len(m.fe)))
 
@@ -356,6 +356,12 @@ class Foot3D:
         plt.title(f'Penalties in foot {self.name}')
         plt.legend()
         plt.grid(True)
+        plt.tight_layout()
+
+        if save_to is not None:
+            plt.gcf().savefig(f'{save_to}penalties-{self.name}.pdf')
+        else:
+            plt.show()
         plt.show()
 
         fig = plt.figure()
@@ -377,6 +383,7 @@ class Foot3D:
 
         fig.legend(loc='center')
         fig.tight_layout()  # otherwise the right y-label is slightly clipped
+        plt.gcf().savefig('msc-plots/plt-'+self.name + '-footheight-force.pdf')
         plt.show()
 
     def __repr__(self) -> str:

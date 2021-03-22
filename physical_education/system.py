@@ -249,7 +249,9 @@ class System3D:
                        plot3d_config: Dict = {},
                        save_to: Optional[str] = None,
                        ground_color: str = 'lightgray',
-                       lims: Optional[Tuple[Tuple, Tuple, Tuple]] = None):
+                       lims: Optional[Tuple[Tuple, Tuple, Tuple]] = None,
+                       plotgrass: bool = False,
+                       plotgrass_kwargs: Dict = {}):
         # need to import this to get 3D plots working, for some reason
         from mpl_toolkits import mplot3d
 
@@ -264,6 +266,9 @@ class System3D:
             ax.set_xlim(*x)
             ax.set_ylim(*y)
             ax.set_zlim(*z)
+
+            if plotgrass:
+                visual.plotgrass(ax, *x, *y, **plotgrass_kwargs)
 
         visual.set_view(ax, along=view_along)
 
@@ -429,21 +434,25 @@ class System3D:
                 link.cleanup_animation(fig, ax)
             del fig, ax
 
-    def plot(self, plot_links: bool = True) -> None:
+    def plot(self, save_to: Optional[str] = None, plot_links: bool = True) -> None:
         pyo_model = utils.get_pyomo_model_or_error(self)
 
         if utils.has_variable_timestep(pyo_model):
             import matplotlib.pyplot as plt
-            plt.title('Timestep size vs finite element')
             data = 1000*utils.get_vals(pyo_model.hm) * pyo_model.hm0.value
             plt.plot(data)
             plt.ylabel('Timestep size [ms]')
-            plt.ylim([0, max(data)*1.1])
-            plt.show()
+            plt.title('Timestep size vs finite element')
+            plt.tight_layout()
+
+            if save_to is not None:
+                plt.gcf().savefig(f'{save_to}timestep-length-{self.name}.pdf')
+            else:
+                plt.show()
 
         if plot_links:
             for link in self.links:
-                link.plot()
+                link.plot(save_to=save_to)
 
     def __repr__(self) -> str:
         child_links = '\n  '.join(str(link) + ',' for link in self.links)

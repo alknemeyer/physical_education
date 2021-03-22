@@ -78,7 +78,7 @@ class _TorqueSpeedLimit:
                 pyo.Constraint(m.fe, Tc_set, ('+', '-'),
                                rule=torque_speed_limit_constr))
 
-    def plot(self, _ax: Optional['Axes'] = None, markersize: float = 5.):
+    def plot(self, _ax: Optional['Axes'] = None, markersize: float = 5., save_to: Optional[str] = None):
         m = self.Tc.model()
         # ncp = len(m.cp)
         data: List[List[float]] = [
@@ -122,6 +122,11 @@ class _TorqueSpeedLimit:
         plt.ylabel('Input torque $\\tau$ [Nm/body_weight]')
         plt.legend()
         plt.grid(True)
+        plt.tight_layout()
+        if save_to is not None:
+            plt.gcf().savefig(f'{save_to}torque-scatterplot-{self.name}.pdf')
+        else:
+            plt.show()
         plt.show()
 
         return ax
@@ -274,7 +279,7 @@ class Motor3D:
     def cleanup_animation(self, fig, ax):
         pass
 
-    def plot(self) -> None:
+    def plot(self, save_to: Optional[str] = None) -> None:
         import matplotlib.pyplot as plt
         try:
             Tc_set = self.pyomo_sets['Tc_set']
@@ -285,7 +290,11 @@ class Motor3D:
             plt.title('Input torques in link ' + self.name)
             plt.xlabel('Finite element')
             plt.ylabel('$T$ [Nm/body_weight]')
-            plt.show()
+            plt.tight_layout()
+            if save_to is not None:
+                plt.gcf().savefig(f'{save_to}torque-lineplot-{self.name}.pdf')
+            else:
+                plt.show()
         except StopIteration:
             pass
 
