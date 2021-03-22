@@ -1,6 +1,7 @@
-from typing import Any, Dict, Iterable, Optional, Tuple, Callable
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Callable
 from math import pi as π
 from sympy import Matrix as Mat
+from numpy import ndarray
 
 from physical_education.links import Link3D, constrain_rel_angle
 from physical_education.system import System3D
@@ -471,7 +472,7 @@ def periodic_gallop_test(robot: System3D,
     body['q'][1, ncp, 'y'].fix(0)
 
     if init_from_dict is None:
-        if at_angle_d is None:
+        if at_angle_d is None or at_angle_d == 0:
             # init to y plane
             body['q'][:, :, 'y'].value = 0
 
@@ -720,62 +721,42 @@ def theoretical_peak_angle_velocity(stride_freq_Hz: float = 3.,
 #     plt.xlabel('time [s]')
 #     plt.show()
 
-def full_tail_analysis(robotname: str, dataname: str, nfe: int):
-    import dill
-    import pathlib
-    cheetah: System3D
-    with open(f'robots-and-data/{robotname}.robot', 'rb') as f:
-        cheetah, add_pyomo_constraints = dill.load(f)
 
-    # random model - we'll init from dict anyway
-    cheetah.make_pyomo_model(nfe=nfe, collocation='implicit_euler', total_time=0.30,
-                             vary_timestep_within=(0.5, 1.5), include_dynamics=False)
-
-    cheetah.init_from_dict(
-        dill.loads(pathlib.Path(dataname).read_bytes()),
-        skip_if_fixed=True, skip_if_not_None=False, fix=False)
-    relative_tail_velocity(cheetah)
-
-
-def relative_tail_velocity(cheetah: System3D):
-    from physical_education.utils import get_vals
+def relative_tail_velocity(cheetah: System3D, plot: bool) -> Dict[Tuple[str, str, str], ndarray]:
     import matplotlib.pyplot as plt
     from numpy import degrees, array  # type: ignore
+    import numpy as np
 
     base_B = cheetah['base_B']
     tail0 = cheetah['tail0']
     tail1 = cheetah['tail1']
-    m = cheetah.m
-    assert m is not None
+
+    diffs = {}
 
     for a, b in ((base_B, tail0), (tail0, tail1)):
-        # diff = {'psi': 0, 'theta': 0}
-        # for p in pair:
-        #     qset = p.pyomo_sets['q_set']
-        #     data = get_vals(p['q'], (qset,))
-        #     for ang in ('psi', 'theta'):
-        #         idx = list(qset).index(ang)
-        #         data_ang = data[:,0,idx]
-        #         diff[ang] += data_ang
-        # vela, velb = (get_vals(v['q'], (v.pyomo_sets['q_set'],)) for v in pair)
-
         for ang in ('psi', 'theta'):
-            vela = array([a['q'][fe, cp, ang].value for fe,
-                          cp in cheetah.indices(one_based=True)])
-            velb = array([b['q'][fe, cp, ang].value for fe,
-                          cp in cheetah.indices(one_based=True)])
+            vela = array([a['q'][fe, cp, ang].value
+                          for fe, cp in cheetah.indices(one_based=True)])
+            velb = array([b['q'][fe, cp, ang].value
+                          for fe, cp in cheetah.indices(one_based=True)])
             # diff = velb[:,0,idx] - vela[:,0,idx]
-            diff = vela - velb
+            diff: np.ndarray = vela - velb
 
-            plt.plot(degrees(vela))
-            plt.plot(degrees(velb))
-            plt.plot(degrees(diff))
-            plt.legend((a.name, b.name, 'diff'))
-            plt.title(f'{a.name} - {b.name}: {ang}, in degrees/sec')
-            plt.show()
+            diffs[(a.name, b.name, ang)] = diff
+
+            if plot is True:
+                plt.plot(degrees(vela))
+                plt.plot(degrees(velb))
+                plt.plot(degrees(diff))
+                plt.legend((a.name, b.name, 'diff'))
+                plt.title(f'{a.name} - {b.name}: {ang}, in degrees/sec')
+                plt.show()
 
 
-def gather_torque_data(cheetah: 'System3D', datanames: Iterable[str]) -> Dict[str, list]:
+    return diffs
+
+
+def gather_torque_data(cheetah: System3D, datanames: Iterable[str]) -> Dict[str, List[ndarray]]:
     import dill
     import pathlib
     import numpy as np
