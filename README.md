@@ -187,9 +187,11 @@ IF you use conda, instructions are as follows:
 * use pypy, as recommended, now that pypy [is available](https://conda-forge.org/blog/posts/2020-03-10-pypy/) via conda. In the code below, replace `ENV_NAME` with the name you want to use for your virtual environment:
     ```bash
     $ conda config --set channel_priority strict
-    $ conda create -n ENV_NAME pypy
+    $ conda create -c conda-forge --name ENV_NAME pypy
     $ conda activate ENV_NAME
     $ pypy3 -m pip install physical_education
+    # see this link for more info:
+    # https://stackoverflow.com/a/62186941/1892669
     ```
 * or, using CPython:
     ```bash
