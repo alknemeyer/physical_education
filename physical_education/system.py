@@ -315,7 +315,8 @@ class System3D:
                 lims: Optional[Tuple[Tuple, Tuple, Tuple]] = None,
                 track: Optional[str] = None,
                 dt: Optional[float] = None,
-                save_to: Optional[str] = None):
+                save_to: Optional[str] = None,
+                use_html5_video: bool = True):
         # need to import this to get 3D plots working, for some reason
         from mpl_toolkits import mplot3d
         import matplotlib.animation
@@ -421,7 +422,13 @@ class System3D:
                 anim.save(save_to)
             elif utils.in_ipython():
                 from IPython.core.display import display, HTML
-                display(HTML(anim.to_html5_video()))
+                # If you are using Jupyter notebook in VS code, `anim.to_html5_video` does not work.
+                # Refer to this link: https://github.com/microsoft/vscode-jupyter/issues/1912
+                # Instead set this flag to false to use a compliant one.
+                if use_html5_video:
+                    display(HTML(anim.to_html5_video()))
+                else:
+                    display(HTML(anim.to_jshtml()))
             else:
                 fig.show()
 
