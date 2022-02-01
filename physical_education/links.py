@@ -62,16 +62,19 @@ class Link3D:
         angles = self.q  # used for defining rotation matrix
 
         if rotations is not None and parent_orientation is not None:
-            assert all(ax in 'xyz' for ax in rotations), "Can't rotate about axis {ax}"
+            self.relative_orientation = True
             self.Rb_I = parent_orientation
             for (rotation, angle) in zip(rotations, angles):
                 if rotation == 'x':
                     self.Rb_I = utils.rot_x(angle) @ self.Rb_I
-                if rotation == 'y':
+                elif rotation == 'y':
                     self.Rb_I = utils.rot_y(angle) @ self.Rb_I
-                if rotation == 'z':
+                elif rotation == 'z':
                     self.Rb_I = utils.rot_z(angle) @ self.Rb_I
+                raise ValueError(f"Can't rotate about '{rotation}'")
         else:
+            self.relative_orientation = False
+
             # rotation matrix from body to inertial
             self.Rb_I = utils.euler_321(*angles).T
 
@@ -83,11 +86,9 @@ class Link3D:
         else:
             xyz = None
 
-        # rotation matrix from body to inertial
-        self.Rb_I = utils.euler_321(*angles).T
-
+        # https://study.com/skill/learn/how-to-calculate-the-moment-of-inertia-for-a-cylinder-explanation.html
         I_len = (self.mass_sym * self.radius_sym**2)/2
-        I_wid = (self.mass_sym * self.length_sym**2)/12
+        I_wid = I_len/2 + (self.mass_sym * self.length_sym**2)/12
         if aligned_along.endswith('x'):
             self.inertia = sp.diag(I_len, I_wid, I_wid)
             offset_b = Mat([-self.length_sym/2, 0, 0])
