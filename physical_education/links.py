@@ -1,7 +1,7 @@
 # https://stackoverflow.com/questions/15853469/putting-current-class-as-return-type-annotation
 # can't use this while supporting python 3.6 (PyPy 7.3), have to use strings for now
 # from __future__ import annotations
-from typing import Any, Dict, Iterable, Optional, List, TYPE_CHECKING, cast
+from typing import Any, Dict, Iterable, Optional, List, TYPE_CHECKING
 from typing_extensions import TypedDict
 import sympy as sp
 import numpy as np
@@ -21,19 +21,21 @@ class Link3D:
                  meta: Iterable[str] = tuple(),
                  mass: Optional[float] = None,
                  length: Optional[float] = None,
-                 radius: Optional[float] = None
+                 radius: Optional[float] = None,
+                 rotations: Optional[str] = None,
+                 parent_orientation: Optional[Mat] = None,
                  ):
         """
-        Define a 3D link. Assumes the link is vertical, ie aligned with the z-axis
+        Define a 3D link. If all angles are zero, the link is assumed to be vertical
+        (ie aligned with the z-axis)
 
-        name:
-            name of the link
-        start_I:
-            the location of the start of the link in inertial coordinates
-        base:
-            whether this link is the/a base link
-        meta:
-            information which qualitatively describes a link, like 'spine', 'leg', etc
+        - `name`: name of the link
+        - `start_I`: the location of the start of the link in inertial coordinates
+        - `base`: whether this link is the/a base link
+        - `meta`: information which qualitatively describes a link, like 'spine', 'leg', etc
+        - `rotations`: by default, the orientation of the link is defined by three rotations from
+            the inertial frame. If `rotations` is provided, the orientation of the link
+            is taken to be relative to the world frame
         """
         # assert sum([top_I is not None, bottom_I is not None, base is True]) == 1,\
         #     'Only one of top_I, bottom_I or base can be specified'
@@ -43,6 +45,9 @@ class Link3D:
         acceptable_args = ('+x', '+y', '+z', '-x', '-y', '-z')
         assert aligned_along in acceptable_args,\
             f'Align the link along the x, y or z axes. Got {aligned_along}, must be one of {acceptable_args}'
+        
+        assert (rotations is None) == (parent_orientation is None), \
+            f'Either both `rotations` and `parent_orientation` must be passed, or both must be left as `None`'
 
         self.mass_sym = sp.Symbol('m_{%s}' % name)
         self.length_sym = sp.Symbol('L_{%s}' % name)
@@ -55,6 +60,20 @@ class Link3D:
 
         self.q, self.dq, self.ddq = symdef.make_ang_syms(name)
         angles = self.q  # used for defining rotation matrix
+
+        if rotations is not None and parent_orientation is not None:
+            assert all(ax in 'xyz' for ax in rotations), "Can't rotate about axis {ax}"
+            self.Rb_I = parent_orientation
+            for (rotation, angle) in zip(rotations, angles):
+                if rotation == 'x':
+                    self.Rb_I = utils.rot_x(angle) @ self.Rb_I
+                if rotation == 'y':
+                    self.Rb_I = utils.rot_y(angle) @ self.Rb_I
+                if rotation == 'z':
+                    self.Rb_I = utils.rot_z(angle) @ self.Rb_I
+        else:
+            # rotation matrix from body to inertial
+            self.Rb_I = utils.euler_321(*angles).T
 
         if base is True:
             xyz, dxyz, ddxyz = symdef.make_xyz_syms(name)

@@ -32,7 +32,7 @@ def make_xyz_syms(i: str) -> Tuple[Mat, Mat, Mat]:
     return Mat(q), Mat(dq), Mat(ddq)
 
 
-def make_ang_syms(i: str) -> Tuple[Mat, Mat, Mat]:
+def make_ang_syms(i: str, nvars: int=3) -> Tuple[Mat, Mat, Mat]:
     """
     Define `\\phi`, `\\theta`, `\\psi` (ϕ θ ψ) symbols and time derivatives, with subscript `i`
 
@@ -45,6 +45,8 @@ def make_ang_syms(i: str) -> Tuple[Mat, Mat, Mat]:
     [\\dot{\\theta}_{test}],
     [  \\dot{\\psi}_{test}]])
     """
+    assert 1 <= nvars <= 3
+
     global USE_LATEX
     if USE_LATEX is True:
         q = sp.symbols(r'\phi_{%s} \theta_{%s} \psi_{%s}' % (i, i, i))
@@ -57,4 +59,4 @@ def make_ang_syms(i: str) -> Tuple[Mat, Mat, Mat]:
         dq = sp.symbols(f' dϕ_{i}  dθ_{i}  dψ_{i}')
         ddq = sp.symbols(f'ddϕ_{i} ddθ_{i} ddψ_{i}')
 
-    return Mat(q), Mat(dq), Mat(ddq)
+    return Mat(q)[:nvars, :nvars], Mat(dq)[:nvars, :nvars], Mat(ddq)[:nvars, :nvars]
