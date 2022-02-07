@@ -45,7 +45,7 @@ class Link3D:
         acceptable_args = ('+x', '+y', '+z', '-x', '-y', '-z')
         assert aligned_along in acceptable_args,\
             f'Align the link along the x, y or z axes. Got {aligned_along}, must be one of {acceptable_args}'
-        
+
         assert (rotations is None) == (parent_orientation is None), \
             f'Either both `rotations` and `parent_orientation` must be passed, or both must be left as `None`'
 
@@ -63,15 +63,29 @@ class Link3D:
 
         if rotations is not None and parent_orientation is not None:
             self.relative_orientation = True
+            q_list, dq_list, ddq_list = [], [], []
+            for rotation in rotations:
+                q_temp, dq_temp, ddq_temp = symdef.make_ang_sym(rotation, name)
+                q_list.append([q_temp])
+                dq_list.append([dq_temp])
+                ddq_list.append([ddq_temp])
+            self.q = Mat(q_list)
+            self.dq = Mat(dq_list)
+            self.ddq = Mat(ddq_list)
             self.Rb_I = parent_orientation
-            for (rotation, angle) in zip(rotations, angles):
+            self.rel_q_set = []
+            for (rotation, angle) in zip(rotations, self.q):
                 if rotation == 'x':
                     self.Rb_I = utils.rot_x(angle) @ self.Rb_I
+                    self.rel_q_set.append('phi')
                 elif rotation == 'y':
                     self.Rb_I = utils.rot_y(angle) @ self.Rb_I
+                    self.rel_q_set.append('theta')
                 elif rotation == 'z':
                     self.Rb_I = utils.rot_z(angle) @ self.Rb_I
-                raise ValueError(f"Can't rotate about '{rotation}'")
+                    self.rel_q_set.append('psi')
+                else:
+                    raise ValueError(f"Can't rotate about '{rotation}'")
         else:
             self.relative_orientation = False
 
@@ -194,11 +208,11 @@ class Link3D:
                 f'The {attr} for {self.name} must be set to a float'
 
         if self.is_base:
-            q_set = pyo.Set(initialize=('x', 'y', 'z', 'phi', 'theta', 'psi'),
-                            name='q_set', ordered=True)
+            q_set = pyo.Set(initialize=('x', 'y', 'z', 'phi', 'theta', 'psi'), name='q_set', ordered=True)
+        elif self.relative_orientation:
+            q_set = pyo.Set(initialize=self.rel_q_set, name='q_set', ordered=True)
         else:
-            q_set = pyo.Set(initialize=('phi', 'theta', 'psi'),
-                            name='q_set', ordered=True)
+            q_set = pyo.Set(initialize=('phi', 'theta', 'psi'), name='q_set', ordered=True)
 
         Fr_set = pyo.Set(initialize=range(len(self.constraint_forces)),
                          name='Fr_set', ordered=True)

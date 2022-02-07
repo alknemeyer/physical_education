@@ -1,6 +1,6 @@
 import sympy as sp
 from sympy import Matrix as Mat
-from typing import Tuple
+from typing import Iterable, Tuple
 
 USE_LATEX: bool = True
 
@@ -32,7 +32,7 @@ def make_xyz_syms(i: str) -> Tuple[Mat, Mat, Mat]:
     return Mat(q), Mat(dq), Mat(ddq)
 
 
-def make_ang_syms(i: str, nvars: int=3) -> Tuple[Mat, Mat, Mat]:
+def make_ang_syms(i: str, nvars: int = 3) -> Tuple[Mat, Mat, Mat]:
     """
     Define `\\phi`, `\\theta`, `\\psi` (ϕ θ ψ) symbols and time derivatives, with subscript `i`
 
@@ -60,3 +60,38 @@ def make_ang_syms(i: str, nvars: int=3) -> Tuple[Mat, Mat, Mat]:
         ddq = sp.symbols(f'ddϕ_{i} ddθ_{i} ddψ_{i}')
 
     return Mat(q)[:nvars, :nvars], Mat(dq)[:nvars, :nvars], Mat(ddq)[:nvars, :nvars]
+
+
+def make_ang_sym(rot_axis: str, i: str) -> Tuple[Iterable[sp.Symbol], Iterable[sp.Symbol], Iterable[sp.Symbol]]:
+    """
+    Define a single angle `\\phi` or `\\theta` or `\\psi` (ϕ θ ψ) symbols and time derivatives, with subscript `i`
+
+    ## Usage
+
+    >>> ptp, dptp, ddptp = make_ang_sym('x', 'test')
+    >>> dptp
+    \\dot{\\phi}_{test}
+    """
+    acceptable_args = ('x', 'y', 'z')
+    assert rot_axis in acceptable_args,\
+        f'Rotation about "xyz". Got {rot_axis}, must be one of {acceptable_args}'
+
+    global USE_LATEX
+    var_name = ''
+    if rot_axis == 'x':
+        var_name = 'phi' if USE_LATEX else 'ϕ'
+    elif rot_axis == 'y':
+        var_name = 'theta' if USE_LATEX else 'θ'
+    elif rot_axis == 'z':
+        var_name = 'psi' if USE_LATEX else 'ψ'
+
+    if USE_LATEX is True:
+        q = sp.symbols(r'\%s_{%s}' % (var_name, i))
+        dq = sp.symbols(r'\dot{\%s}_{%s}' % (var_name, i))
+        ddq = sp.symbols(r'\ddot{\%s}_{%s}' % (var_name, i))
+    else:
+        q = sp.symbols(f'{var_name}_{i}')
+        dq = sp.symbols(f'd{var_name}_{i}')
+        ddq = sp.symbols(f'dd{var_name}_{i}')
+
+    return q, dq, ddq
