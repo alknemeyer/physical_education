@@ -28,6 +28,9 @@ class System3D:
         self.name = name
         self.links = links
         self.m: Union[ConcreteModel, None] = None
+        self.sp_variables: List[sp.Symbol] = flatten(
+            link.get_sympy_vars() for link in self.links
+        )
 
     def add_link(self, link: 'Link3D') -> None:
         self.links.append(link)
@@ -85,11 +88,6 @@ class System3D:
 
         # eom_c = M @ ddq + G - B
         # eom_c = simp_func(Mat([*eom_c, *angle_constraints]).xreplace(to_sub))
-
-        self.sp_variables: List[sp.Symbol] = flatten(
-            link.get_sympy_vars() for link in self.links
-        )
-
         visual.info(f'Number of operations in EOM is {sp.count_ops(eom)}')
 
         # the lambdifying step actually takes quite long
