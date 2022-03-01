@@ -169,7 +169,7 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
 
         >>> lambdify_EOM(EOM, vars_in_EOM)
         [<function _lambdifygenerated(_Dummy_833, _Dummy_834, ...
-         <function _lambdifygenerated(_Dummy_851, _Dummy_852, ... 
+         <function _lambdifygenerated(_Dummy_851, _Dummy_852, ...
          <function _lambdifygenerated(_Dummy_923, _Dummy_924, ...]
 
         >>> lambdify_EOM(EOM, vars_in_EOM[:-3])  # not all vars in EOM
@@ -500,6 +500,7 @@ def default_solver(*,
     opt.options['OF_acceptable_tol'] = 1e-3  # default: 1e-6
     opt.options['OF_warm_start_init_point'] = 'yes' if warm_start_init_point else 'no'
     opt.options['output_file'] = os.getcwd() + '/' + output_file
+    opt.options['OF_hessian_approximation'] = OF_hessian_approximation
 
     opt.options['linear_solver'] = solver
     if solver == 'ma86':
