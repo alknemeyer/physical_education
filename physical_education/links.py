@@ -163,7 +163,7 @@ class Link3D:
         """Add a hooke's joint about axis `about` of `self`
         >>> link_body.add_hookes_joint(link_UFL, about='xy')
         """
-        assert all(ax in ('x', 'y', 'z') for ax in about) and len(about) == 2
+        assert all(ax in ('x', 'y', 'z') for ax in about) and len(about) == 2 and not self.relative_orientation
 
         axes = Mat([1, 0, 0]), Mat([0, 1, 0]), Mat([0, 0, 1])
         vec1 = axes['xyz'.index(about[0])]
@@ -185,7 +185,7 @@ class Link3D:
 
         >>> link_UFL.add_revolute_joint(link_LFL, about='y')
         """
-        assert about in ('x', 'y', 'z')
+        assert about in ('x', 'y', 'z') and not self.relative_orientation
         axes = Mat([1, 0, 0]), Mat([0, 1, 0]), Mat([0, 0, 1])
         constraint_axis = axes['xyz'.index(about)]
         other_axes = [mat for idx, mat in enumerate(axes)
