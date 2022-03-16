@@ -7,7 +7,7 @@ from pyomo.environ import (
 from sympy import Matrix as Mat
 from . import utils, variable_list, visual
 from . import collocation as _collocation
-from .utils import flatten
+from .utils import flatten, parsimp
 
 if TYPE_CHECKING:
     from .links import Link3D
@@ -164,6 +164,16 @@ class System3D:
                     if not (fe == 1 and cp < ncp) else Constraint.Skip
         else:
             visual.warn('Not including dynamics (EOM_constr) in model')
+            # Add angle constraints to ensure kinematic formulation is still valid with constraint forces.
+            angle_constraints = parsimp(Mat(flatten(link.angle_constraints for link in self.links)), nprocs=12)
+            if angle_constraints.shape[0] > 0:
+                f_angle_constraints = utils.lambdify_EOM(
+                    angle_constraints,
+                    self.sp_variables,
+                )
+                @m.Constraint(m.fe, range(len(f_angle_constraints)))
+                def angle_constr(m, fe, i):
+                    return f_angle_constraints[i]([*self.pyo_variables[fe, ncp]]) == 0.0
 
     def save_data_to_dict(self, description: str) -> Dict[str, Any]:
         return {
