@@ -30,6 +30,7 @@ class Foot3D:
         self.friction_coeff = friction_coeff
         self.GRFxy_max = GRFxy_max
         self.GRFz_max = GRFz_max
+        self.prevent_grf_estimation = False
 
         # the contact/friction stuff:
         self.D = friction_polygon(nsides)
@@ -41,6 +42,12 @@ class Foot3D:
             'plot_forces': True,
             'force_scale': 1,
         }
+
+    def enable_contact_estimation(self, enable: bool):
+        # Note, this should be called prior to construction of the pyomo model.
+        # This prevents the estimation of contact forces and instead relies on an external
+        # data source to provide the contact forces.
+        self.prevent_grf_estimation = enable
 
     def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
         self.Pb_I_vel = self.Pb_I.jacobian(q) @ dq
@@ -62,17 +69,31 @@ class Foot3D:
                     bounds=(0, self.GRFxy_max))
         GRFz = Var(m.fe, m.cp, name='GRFz',
                    bounds=(0, self.GRFz_max))
+        if self.prevent_grf_estimation:
+            self.pyomo_vars: Dict[str, Var] = {
+                'GRFxy': GRFxy, 'GRFz': GRFz,
+            }
+        else:
+            # dummy vars equal to parts from EOM
+            foot_height = Var(m.fe, m.cp, name='foot_height', bounds=(0, None))
+            foot_xy_vel = Var(m.fe, m.cp, xy_set, name='foot_xyvel')
+            gamma = Var(m.fe, m.cp, name='gamma (foot xy-velocity magnitude)',
+                        bounds=(0, None))
 
-        # dummy vars equal to parts from EOM
-        foot_height = Var(m.fe, m.cp, name='foot_height', bounds=(0, None))
-        foot_xy_vel = Var(m.fe, m.cp, xy_set, name='foot_xyvel')
-        gamma = Var(m.fe, m.cp, name='gamma (foot xy-velocity magnitude)',
-                    bounds=(0, None))
+            # penalty variables
+            contact_penalty = Var(m.fe, name='contact_penalty', bounds=(0, 1))
+            friction_penalty = Var(m.fe, name='friction_penalty', bounds=(0, 1))
+            slip_penalty = Var(m.fe, fric_set, name='slip_penalty', bounds=(0, 1))
 
-        # penalty variables
-        contact_penalty = Var(m.fe, name='contact_penalty', bounds=(0, 1))
-        friction_penalty = Var(m.fe, name='friction_penalty', bounds=(0, 1))
-        slip_penalty = Var(m.fe, fric_set, name='slip_penalty', bounds=(0, 1))
+            self.pyomo_vars: Dict[str, Var] = {
+                'GRFxy': GRFxy, 'GRFz': GRFz,
+                'foot_height': foot_height,
+                'foot_xy_vel': foot_xy_vel,
+                'gamma': gamma,
+                'contact_penalty': contact_penalty,
+                'friction_penalty': friction_penalty,
+                'slip_penalty': slip_penalty,
+            }
 
         self.pyomo_params: Dict[str, Param] = {
             'friction_coeff': friction_coeff
@@ -80,15 +101,6 @@ class Foot3D:
         self.pyomo_sets: Dict[str, Set] = {
             'xy_set': xy_set,
             'fric_set': fric_set,
-        }
-        self.pyomo_vars: Dict[str, Var] = {
-            'GRFxy': GRFxy, 'GRFz': GRFz,
-            'foot_height': foot_height,
-            'foot_xy_vel': foot_xy_vel,
-            'gamma': gamma,
-            'contact_penalty': contact_penalty,
-            'friction_penalty': friction_penalty,
-            'slip_penalty': slip_penalty,
         }
 
         utils.add_to_pyomo_model(m, self.name, [
@@ -158,96 +170,97 @@ class Foot3D:
                                      sp_variables: List[sp.Symbol],
                                      pyo_variables: 'VariableList',
                                      collocation: str):
-        friction_coeff = self.pyomo_params['friction_coeff']
-        m = friction_coeff.model()
+        if not self.prevent_grf_estimation:
+            friction_coeff = self.pyomo_params['friction_coeff']
+            m = friction_coeff.model()
 
-        xy_set = self.pyomo_sets['xy_set']  # foot_xy_vel below
-        fric_set = self.pyomo_sets['fric_set']
+            xy_set = self.pyomo_sets['xy_set']  # foot_xy_vel below
+            fric_set = self.pyomo_sets['fric_set']
 
-        GRFxy = self.pyomo_vars['GRFxy']
-        GRFz = self.pyomo_vars['GRFz']
+            GRFxy = self.pyomo_vars['GRFxy']
+            GRFz = self.pyomo_vars['GRFz']
 
-        foot_height = self.pyomo_vars['foot_height']
-        foot_xy_vel = self.pyomo_vars['foot_xy_vel']
-        gamma = self.pyomo_vars['gamma']
+            foot_height = self.pyomo_vars['foot_height']
+            foot_xy_vel = self.pyomo_vars['foot_xy_vel']
+            gamma = self.pyomo_vars['gamma']
 
-        contact_penalty = self.pyomo_vars['contact_penalty']
-        friction_penalty = self.pyomo_vars['friction_penalty']
-        slip_penalty = self.pyomo_vars['slip_penalty']
+            contact_penalty = self.pyomo_vars['contact_penalty']
+            friction_penalty = self.pyomo_vars['friction_penalty']
+            slip_penalty = self.pyomo_vars['slip_penalty']
 
-        self.foot_pos_func = utils.lambdify_EOM(self.Pb_I, sp_variables)
-        self.foot_xy_vel_func = utils.lambdify_EOM(
-            self.Pb_I_vel[:2], sp_variables)
+            self.foot_pos_func = utils.lambdify_EOM(self.Pb_I, sp_variables)
+            self.foot_xy_vel_func = utils.lambdify_EOM(
+                self.Pb_I_vel[:2], sp_variables)
 
-        ncp = len(m.cp)
+            ncp = len(m.cp)
 
-        def add_constraints(name: str, func: Callable, indexes: Iterable):
-            setattr(m, self.name + '_' + name,
-                    Constraint(*indexes, rule=func))
+            def add_constraints(name: str, func: Callable, indexes: Iterable):
+                setattr(m, self.name + '_' + name,
+                        Constraint(*indexes, rule=func))
 
-        def def_foot_height(m, fe, cp):    # foot height above z == 0 (xy-plane)
-            if (fe == 1 and cp < ncp):
-                return Constraint.Skip
-            return foot_height[fe, cp] == self.foot_pos_func[2](pyo_variables[fe, cp])
+            def def_foot_height(m, fe, cp):    # foot height above z == 0 (xy-plane)
+                if (fe == 1 and cp < ncp):
+                    return Constraint.Skip
+                return foot_height[fe, cp] == self.foot_pos_func[2](pyo_variables[fe, cp])
 
-        add_constraints('foot_height_constr', def_foot_height, (m.fe, m.cp))
+            add_constraints('foot_height_constr', def_foot_height, (m.fe, m.cp))
 
-        def def_foot_xy_vel(m, fe, cp, xy):  # foot velocity in xy-plane
-            if (fe == 1 and cp < ncp):
-                return Constraint.Skip
-            i = 0 if xy == 'x' else 1
-            return foot_xy_vel[fe, cp, xy] == self.foot_xy_vel_func[i](pyo_variables[fe, cp])
+            def def_foot_xy_vel(m, fe, cp, xy):  # foot velocity in xy-plane
+                if (fe == 1 and cp < ncp):
+                    return Constraint.Skip
+                i = 0 if xy == 'x' else 1
+                return foot_xy_vel[fe, cp, xy] == self.foot_xy_vel_func[i](pyo_variables[fe, cp])
 
-        add_constraints('foot_xy_vel_constr',
-                        def_foot_xy_vel, (m.fe, m.cp, xy_set))
+            add_constraints('foot_xy_vel_constr',
+                            def_foot_xy_vel, (m.fe, m.cp, xy_set))
 
-        def def_gamma(m, fe, cp, i):  # this sets gamma to the biggest of vx + vy
-            if (fe == 1 and cp < ncp):
-                return Constraint.Skip
-            vx, vy = foot_xy_vel[fe, cp, 'x'], foot_xy_vel[fe, cp, 'y']
-            return gamma[fe, cp] >= vx * self.D[i, 0] + vy * self.D[i, 1]
+            def def_gamma(m, fe, cp, i):  # this sets gamma to the biggest of vx + vy
+                if (fe == 1 and cp < ncp):
+                    return Constraint.Skip
+                vx, vy = foot_xy_vel[fe, cp, 'x'], foot_xy_vel[fe, cp, 'y']
+                return gamma[fe, cp] >= vx * self.D[i, 0] + vy * self.D[i, 1]
 
-        add_constraints('gamma_constr', def_gamma, (m.fe, m.cp, fric_set))
+            add_constraints('gamma_constr', def_gamma, (m.fe, m.cp, fric_set))
 
-        def def_friction_polyhedron(m, fe, cp):
-            if (fe == 1 and cp < ncp):
-                return Constraint.Skip
-            return friction_coeff * GRFz[fe, cp] >= sum(GRFxy[fe, cp, :])
+            def def_friction_polyhedron(m, fe, cp):
+                if (fe == 1 and cp < ncp):
+                    return Constraint.Skip
+                return friction_coeff * GRFz[fe, cp] >= sum(GRFxy[fe, cp, :])
 
-        add_constraints('friction_polyhedron_constr',
-                        def_friction_polyhedron, (m.fe, m.cp))
+            add_constraints('friction_polyhedron_constr',
+                            def_friction_polyhedron, (m.fe, m.cp))
 
-        # complementarity equations
-        # z[i+1]*GRFz[i] ≈ 0
-        def def_contact_complementarity(m, fe):
-            if fe < m.fe[-1]:
-                α = sum(foot_height[fe+1, :])
-                β = sum(GRFz[fe, :])
-                return α * β <= contact_penalty[fe]
-            else:
-                return Constraint.Skip
+            # complementarity equations
+            # z[i+1]*GRFz[i] ≈ 0
+            def def_contact_complementarity(m, fe):
+                if fe < m.fe[-1]:
+                    α = sum(foot_height[fe+1, :])
+                    β = sum(GRFz[fe, :])
+                    return α * β <= contact_penalty[fe]
+                else:
+                    return Constraint.Skip
 
-        add_constraints('contact_complementarity_constr',
-                        def_contact_complementarity, (m.fe,))
+            add_constraints('contact_complementarity_constr',
+                            def_contact_complementarity, (m.fe,))
 
-        # (μ * GRFz - Σ GRFxy) * γ ≈ 0
-        def def_friction_complementarity(m, fe):
-            α = friction_coeff * sum(GRFz[fe, :]) - sum(GRFxy[fe, :, :])
-            β = sum(gamma[fe, :])
-            return α * β <= friction_penalty[fe]
+            # (μ * GRFz - Σ GRFxy) * γ ≈ 0
+            def def_friction_complementarity(m, fe):
+                α = friction_coeff * sum(GRFz[fe, :]) - sum(GRFxy[fe, :, :])
+                β = sum(gamma[fe, :])
+                return α * β <= friction_penalty[fe]
 
-        add_constraints('friction_complementarity_constr',
-                        def_friction_complementarity, (m.fe,))
+            add_constraints('friction_complementarity_constr',
+                            def_friction_complementarity, (m.fe,))
 
-        # GRFxy * (γ + dxyᵀ*Dᵢ) ≈ 0
-        def def_slip_complementarity(m, fe, i):
-            vx, vy = foot_xy_vel[fe, :, 'x'], foot_xy_vel[fe, :, 'y']
-            α = sum(GRFxy[fe, :, i])
-            β = sum(gamma[fe, :]) + sum(vx)*self.D[i, 0] + sum(vy)*self.D[i, 1]
-            return α * β <= slip_penalty[fe, i]
+            # GRFxy * (γ + dxyᵀ*Dᵢ) ≈ 0
+            def def_slip_complementarity(m, fe, i):
+                vx, vy = foot_xy_vel[fe, :, 'x'], foot_xy_vel[fe, :, 'y']
+                α = sum(GRFxy[fe, :, i])
+                β = sum(gamma[fe, :]) + sum(vx)*self.D[i, 0] + sum(vy)*self.D[i, 1]
+                return α * β <= slip_penalty[fe, i]
 
-        add_constraints('slip_complementarity_constr',
-                        def_slip_complementarity, (m.fe, fric_set))
+            add_constraints('slip_complementarity_constr',
+                            def_slip_complementarity, (m.fe, fric_set))
 
     def __getitem__(self, varname: str) -> Var:
         return self.pyomo_vars[varname]
