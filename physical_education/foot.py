@@ -56,7 +56,7 @@ class Foot3D:
         friction_coeff = Param(initialize=self.friction_coeff,
                                name='friction_coeff')
         xy_set = Set(initialize=('x', 'y'), name='xy_set', ordered=True)
-        fric_set = Set(initialize=range(8), name='fric_set', ordered=True)
+        fric_set = Set(initialize=range(self.nsides), name='fric_set', ordered=True)
 
         GRFxy = Var(m.fe, m.cp, fric_set, name='GRFxy',
                     bounds=(0, self.GRFxy_max))
