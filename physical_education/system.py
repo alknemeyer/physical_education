@@ -107,7 +107,8 @@ class System3D:
                          scale_forces_by: Optional[float] = None,
                          vary_timestep_within: Optional[Tuple[float, float]] = None,
                          presolve_no_C: bool = False,
-                         include_dynamics: bool = True) -> None:
+                         include_dynamics: bool = True,
+                         include_eom_slack: bool = False) -> None:
         """
         vary_timestep_within:
             the upper and lower bounds for how much the unscaled timestep can change.
@@ -158,10 +159,17 @@ class System3D:
                 scale_forces_by = total_mass * 9.81
             m.force_scale = Param(initialize=scale_forces_by)
 
-            @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))
-            def EOM_constr(m, fe, cp, i):
-                return self.eom_f[i]([*self.pyo_variables[fe, cp], m.force_scale]) == 0 \
-                    if not (fe == 1 and cp < ncp) else Constraint.Skip
+            if include_eom_slack:
+                m.slack_eom = Var(m.fe, m.cp, range(len(self.eom_f)), initialize=0.0, bounds=(-15, 15))
+                @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))
+                def EOM_constr(m, fe, cp, i):
+                    return self.eom_f[i]([*self.pyo_variables[fe, cp], m.force_scale]) == m.force_scale * m.slack_eom[fe, cp, i] \
+                        if not (fe == 1 and cp < ncp) else Constraint.Skip
+            else:
+                @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))
+                def EOM_constr(m, fe, cp, i):
+                    return self.eom_f[i]([*self.pyo_variables[fe, cp], m.force_scale]) == 0 \
+                        if not (fe == 1 and cp < ncp) else Constraint.Skip
         else:
             visual.warn('Not including dynamics (EOM_constr) in model')
             # Add angle constraints to ensure kinematic formulation is still valid with constraint forces.

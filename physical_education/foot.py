@@ -47,7 +47,7 @@ class Foot3D:
         # Note, this should be called prior to construction of the pyomo model.
         # This prevents the estimation of contact forces and instead relies on an external
         # data source to provide the contact forces.
-        self.prevent_grf_estimation = enable
+        self.prevent_grf_estimation = not enable
 
     def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
         self.Pb_I_vel = self.Pb_I.jacobian(q) @ dq
