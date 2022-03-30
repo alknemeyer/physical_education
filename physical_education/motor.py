@@ -1,15 +1,13 @@
 import sympy as sp
 import numpy as np
-from typing import (
-    Any, Dict, Iterator, List, Optional, Tuple, TYPE_CHECKING, Union
-)
+from typing import (Any, Dict, Iterator, List, Optional, Tuple, TYPE_CHECKING, Union)
 import pyomo.environ as pyo
 from sympy import Matrix as Mat
 from . import utils
-from .system import System3D
+from .system import System3D, System2D
 
 if TYPE_CHECKING:
-    from .links import Link3D
+    from .links import Link3D, Link2D
     from .variable_list import VariableList
     from matplotlib.pyplot import Axes
 
@@ -41,20 +39,14 @@ class _TorqueSpeedLimit:
         self.relative_angle_velocities.append(rel_velocity)
         self.axes.append(axis)
 
-    def add_equations_to_pyomo_model(self,
-                                     sp_variables: List[sp.Symbol],
-                                     pyo_variables: 'VariableList',
-                                     collocation: str,
-                                     Tc: pyo.Var,
-                                     Tc_set: pyo.Set):
+    def add_equations_to_pyomo_model(self, sp_variables: List[sp.Symbol], pyo_variables: 'VariableList',
+                                     collocation: str, Tc: pyo.Var, Tc_set: pyo.Set):
         m = Tc.model()
         self.Tc = Tc
         self.Tc_set = Tc_set
         self.pyo_variables = pyo_variables
 
-        self.rel_angle_vels_f = utils.lambdify_EOM(
-            self.relative_angle_velocities, sp_variables
-        )
+        self.rel_angle_vels_f = utils.lambdify_EOM(self.relative_angle_velocities, sp_variables)
 
         τ_sn, τ_sp = self.torque_bounds
         ω_n = self.no_load_speed
@@ -74,23 +66,18 @@ class _TorqueSpeedLimit:
         assert not hasattr(m, constraintname), \
             f'The model already has a constraint with the name {constraintname}'
 
-        setattr(m, constraintname,
-                pyo.Constraint(m.fe, Tc_set, ('+', '-'),
-                               rule=torque_speed_limit_constr))
+        setattr(m, constraintname, pyo.Constraint(m.fe, Tc_set, ('+', '-'), rule=torque_speed_limit_constr))
 
     def plot(self, _ax: Optional['Axes'] = None, markersize: float = 5., save_to: Optional[str] = None):
         m = self.Tc.model()
         # ncp = len(m.cp)
-        data: List[List[float]] = [
-            [v.value for v in self.pyo_variables[fe, 1]]
-            for fe in m.fe
-        ]
+        data: List[List[float]] = [[v.value for v in self.pyo_variables[fe, 1]] for fe in m.fe]
 
-        τ = utils.get_vals(self.Tc, (self.Tc_set,))
+        τ = utils.get_vals(self.Tc, (self.Tc_set, ))
         ω = np.zeros(τ.shape)
         for idx, ω_f in enumerate(self.rel_angle_vels_f):
             for fe in m.fe:
-                ω[fe-1, idx] = ω_f(data[fe-1])
+                ω[fe - 1, idx] = ω_f(data[fe - 1])
 
         import matplotlib.pyplot as plt
         if _ax is None:
@@ -103,12 +90,12 @@ class _TorqueSpeedLimit:
         ω_n = self.no_load_speed
         # plt.plot([0,  2*ω_n], [τ_sp, 0], '--', color='black')
         # plt.plot([-2*ω_n, 0], [0, τ_sn], '--', color='black')
-        ax.plot([0,  2*ω_n], [τ_sp, τ_sn], '--', color='black')
-        ax.plot([-2*ω_n, 0], [τ_sp, τ_sn], '--', color='black')
+        ax.plot([0, 2 * ω_n], [τ_sp, τ_sn], '--', color='black')
+        ax.plot([-2 * ω_n, 0], [τ_sp, τ_sn], '--', color='black')
 
         # torque limit line
-        ax.plot([-2*ω_n, 0], [τ_sp, τ_sp], '--', color='black')
-        ax.plot([0,  2*ω_n], [τ_sn, τ_sn], '--', color='black')
+        ax.plot([-2 * ω_n, 0], [τ_sp, τ_sp], '--', color='black')
+        ax.plot([0, 2 * ω_n], [τ_sn, τ_sn], '--', color='black')
 
         # plot torque vs speed
         for i in range(τ.shape[1]):
@@ -135,8 +122,10 @@ class _TorqueSpeedLimit:
         return f'_TorqueSpeedLimit(torque_bounds={self.torque_bounds}, no_load_speed={self.no_load_speed}, axes={self.axes})'
 
 
-class Motor3D:
-    def __init__(self, name: str, Rb_I: Mat,
+class Motor2D:
+    def __init__(self,
+                 name: str,
+                 Rb_I: Mat,
                  *,
                  torque_bounds: Tuple[float, float],
                  no_load_speed: Optional[float] = None):
@@ -145,8 +134,173 @@ class Motor3D:
         self.torque_bounds = torque_bounds
 
         if no_load_speed is not None:
-            self.torque_speed_limit = _TorqueSpeedLimit(
-                name, torque_bounds, no_load_speed)
+            self.torque_speed_limit = _TorqueSpeedLimit(name, torque_bounds, no_load_speed)
+        self.torque_on_body = Mat([0., 0., 0.])
+        self.torque_on_other_body = Mat([0., 0., 0.])
+
+    def add_input_torques_at(self, otherlink: 'Link2D'):
+        """ Add input torques between two links.
+        >>> link_body.add_input_torques_at(link_UFL)
+        """
+        τ = Mat([sp.symbols(r'\tau_{%s}' % (self.name))])
+        self.input_torque = τ
+
+        self.torque_on_body = Mat([0, 0, self.input_torque])
+        self.torque_on_other_body = -Mat([0, 0, self.input_torque])
+        self.otherlink_Rb_I = otherlink.Rb_I
+
+    def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
+        def rot_2d_to_3d(R) -> Mat:
+            return sp.Matrix([
+                [R[0, 0], R[0, 1], 0],
+                [R[1, 0], R[1, 1], 0],
+                [0, 0, 1],
+            ])
+
+        # Torque on first link.
+        ang_vel_body = utils.skew_symmetric(rot_2d_to_3d(self.Rb_I), utils.vec(*q, sp.symbols("z")),
+                                            utils.vec(*dq, sp.symbols("dz")))
+        dW = Mat([self.torque_on_body.dot(ang_vel_body)])
+        Q = dW.jacobian(dq).T
+        # Torque on second link.
+        ang_vel = utils.skew_symmetric(rot_2d_to_3d(self.otherlink_Rb_I), utils.vec(*q, sp.symbols("z")),
+                                       utils.vec(*dq, sp.symbols("dz")))
+        dW = Mat([self.torque_on_other_body.dot(ang_vel)])
+        Q += dW.jacobian(dq).T
+
+        if hasattr(self, 'torque_speed_limit'):
+            self.torque_speed_limit.add_rel_vel(
+                (ang_vel_body - ang_vel)[2],
+                "z",
+            )
+
+        return Q
+
+    def add_vars_to_pyomo_model(self, m: pyo.ConcreteModel) -> None:
+        from pyomo.environ import Set, Var, Param
+
+        Tc_set = Set(initialize=range(len(self.input_torque)), name='Tc_set', ordered=True)
+        Tc = Var(m.fe, Tc_set, name='Tc', bounds=self.torque_bounds)
+
+        self.pyomo_params: Dict[str, Param] = {}
+        self.pyomo_sets: Dict[str, Set] = {'Tc_set': Tc_set}
+        self.pyomo_vars: Dict[str, Var] = {'Tc': Tc}
+
+        utils.add_to_pyomo_model(m, self.name, [
+            self.pyomo_params.values(),
+            self.pyomo_sets.values(),
+            self.pyomo_vars.values(),
+        ])
+
+    def __getitem__(self, varname: str) -> pyo.Var:
+        return self.pyomo_vars[varname]
+
+    def get_pyomo_vars(self, fe: int, cp: int) -> List:
+        return [
+            *self.pyomo_vars['Tc'][fe, :],
+        ]
+
+    def get_sympy_vars(self) -> List[sp.Symbol]:
+        return [
+            *self.input_torque,
+        ]
+
+    def add_equations_to_pyomo_model(self, sp_variables: List[sp.Symbol], pyo_variables: 'VariableList',
+                                     collocation: str):
+        if hasattr(self, 'torque_speed_limit'):
+            self.torque_speed_limit.add_equations_to_pyomo_model(sp_variables, pyo_variables, collocation,
+                                                                 self.pyomo_vars['Tc'], self.pyomo_sets['Tc_set'])
+
+    def save_data_to_dict(self) -> Dict[str, Any]:
+        Tc_set = self.pyomo_sets['Tc_set']
+
+        return {
+            'name': self.name,
+            'Tc': utils.get_vals(self.pyomo_vars['Tc'], (Tc_set, )) if len(Tc_set) > 0 else [],
+        }
+
+    def init_from_dict_one_point(self,
+                                 data: Dict[str, Any],
+                                 fed: int,
+                                 cpd: int,
+                                 fes: Optional[int] = None,
+                                 cps: Optional[int] = None,
+                                 **kwargs) -> None:
+        if fes is None:
+            fes = fed - 1
+
+        if cps is None:
+            cps = cpd - 1
+
+        if len(data['Tc']) > 0:
+            for idx, T in enumerate(self.pyomo_sets['Tc_set']):
+                utils.maybe_set_var(self.pyomo_vars['Tc'][fed, T], data['Tc'][fes, idx], **kwargs)
+
+    def torque_squared_cost(self):
+        # TODO: add an option to scale by time and body weight?
+        # previous tests slowed things down quite a bit, so I'm not sure
+        # it's worth it, especially since we're not actually doing global
+        # optimization in any case
+        return sum([Tc**2 for Tc in self.pyomo_vars['Tc'][:, :]])
+
+    def animation_setup(self, fig, ax, data: List[List[float]]):
+        pass
+
+    def animation_update(self,
+                         fig,
+                         ax,
+                         fe: Optional[int] = None,
+                         t: Optional[float] = None,
+                         t_arr: Optional[np.ndarray] = None,
+                         track: bool = False):
+        pass
+
+    def cleanup_animation(self, fig, ax):
+        pass
+
+    def plot(self, save_to: Optional[str] = None) -> None:
+        import matplotlib.pyplot as plt
+        try:
+            Tc_set = self.pyomo_sets['Tc_set']
+            Tc = utils.get_vals(self.pyomo_vars['Tc'], (Tc_set, ))
+            plt.plot(Tc)
+            plt.legend(Tc_set)
+            plt.grid(True)
+            plt.title('Input torques in link ' + self.name)
+            plt.xlabel('Finite element')
+            plt.ylabel('$T$ [Nm/body_weight]')
+            plt.tight_layout()
+            if save_to is not None:
+                plt.gcf().savefig(f'{save_to}torque-lineplot-{self.name}.pdf')
+            else:
+                plt.show()
+        except StopIteration:
+            pass
+
+        if hasattr(self, 'torque_speed_limit'):
+            self.torque_speed_limit.plot()
+
+    def __repr__(self) -> str:
+        if hasattr(self, 'torque_speed_limit'):
+            tsl = f'\n{" "*6}{self.torque_speed_limit}'
+        else:
+            tsl = ''
+        return f'Motor2D(name="{self.name}", torque_bounds={self.torque_bounds}{tsl})'
+
+
+class Motor3D:
+    def __init__(self,
+                 name: str,
+                 Rb_I: Mat,
+                 *,
+                 torque_bounds: Tuple[float, float],
+                 no_load_speed: Optional[float] = None):
+        self.name = name
+        self.Rb_I = Rb_I
+        self.torque_bounds = torque_bounds
+
+        if no_load_speed is not None:
+            self.torque_speed_limit = _TorqueSpeedLimit(name, torque_bounds, no_load_speed)
 
         self.input_torques: List[sp.Symbol] = []
         self.torques_on_body = Mat([0., 0., 0.])
@@ -160,9 +314,7 @@ class Motor3D:
         """
         assert all(axis in 'xyz' for axis in about)
 
-        τ = Mat([
-            *sp.symbols(r'\tau_{%s/%s/:%s}' % (self.name, otherlink.name, len(about)))
-        ])
+        τ = Mat([*sp.symbols(r'\tau_{%s/%s/:%s}' % (self.name, otherlink.name, len(about)))])
         self.input_torques.extend(τ)
 
         torques_on_other_body = Mat([0, 0, 0])
@@ -174,8 +326,7 @@ class Motor3D:
             self.torques_on_body += torque
             torques_on_other_body -= torque
 
-        self.other_bodies.append(
-            (torques_on_other_body, otherlink.Rb_I, about))
+        self.other_bodies.append((torques_on_other_body, otherlink.Rb_I, about))
 
     def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
         ang_vel_body = utils.skew_symmetric(self.Rb_I, q, dq)
@@ -190,7 +341,8 @@ class Motor3D:
             if hasattr(self, 'torque_speed_limit'):
                 for ax in about:
                     self.torque_speed_limit.add_rel_vel(
-                        (ang_vel_body - ang_vel)['xyz'.index(ax)], ax,
+                        (ang_vel_body - ang_vel)['xyz'.index(ax)],
+                        ax,
                     )
 
         return Q
@@ -198,8 +350,7 @@ class Motor3D:
     def add_vars_to_pyomo_model(self, m: pyo.ConcreteModel) -> None:
         from pyomo.environ import Set, Var, Param
 
-        Tc_set = Set(initialize=range(len(self.input_torques)),
-                     name='Tc_set', ordered=True)
+        Tc_set = Set(initialize=range(len(self.input_torques)), name='Tc_set', ordered=True)
         Tc = Var(m.fe, Tc_set, name='Tc', bounds=self.torque_bounds)
 
         self.pyomo_params: Dict[str, Param] = {}
@@ -225,29 +376,27 @@ class Motor3D:
             *self.input_torques,
         ]
 
-    def add_equations_to_pyomo_model(self,
-                                     sp_variables: List[sp.Symbol],
-                                     pyo_variables: 'VariableList',
+    def add_equations_to_pyomo_model(self, sp_variables: List[sp.Symbol], pyo_variables: 'VariableList',
                                      collocation: str):
         if hasattr(self, 'torque_speed_limit'):
-            self.torque_speed_limit.add_equations_to_pyomo_model(
-                sp_variables, pyo_variables, collocation,
-                self.pyomo_vars['Tc'], self.pyomo_sets['Tc_set'])
+            self.torque_speed_limit.add_equations_to_pyomo_model(sp_variables, pyo_variables, collocation,
+                                                                 self.pyomo_vars['Tc'], self.pyomo_sets['Tc_set'])
 
     def save_data_to_dict(self) -> Dict[str, Any]:
         Tc_set = self.pyomo_sets['Tc_set']
 
         return {
             'name': self.name,
-            'Tc': utils.get_vals(self.pyomo_vars['Tc'], (Tc_set,)) if len(Tc_set) > 0 else [],
+            'Tc': utils.get_vals(self.pyomo_vars['Tc'], (Tc_set, )) if len(Tc_set) > 0 else [],
         }
 
     def init_from_dict_one_point(self,
                                  data: Dict[str, Any],
-                                 fed: int, cpd: int,
-                                 fes: Optional[int] = None, cps: Optional[int] = None,
-                                 **kwargs
-                                 ) -> None:
+                                 fed: int,
+                                 cpd: int,
+                                 fes: Optional[int] = None,
+                                 cps: Optional[int] = None,
+                                 **kwargs) -> None:
         if fes is None:
             fes = fed - 1
 
@@ -256,8 +405,7 @@ class Motor3D:
 
         if len(data['Tc']) > 0:
             for idx, T in enumerate(self.pyomo_sets['Tc_set']):
-                utils.maybe_set_var(
-                    self.pyomo_vars['Tc'][fed, T], data['Tc'][fes, idx], **kwargs)
+                utils.maybe_set_var(self.pyomo_vars['Tc'][fed, T], data['Tc'][fes, idx], **kwargs)
 
     def torque_squared_cost(self):
         # TODO: add an option to scale by time and body weight?
@@ -269,7 +417,9 @@ class Motor3D:
     def animation_setup(self, fig, ax, data: List[List[float]]):
         pass
 
-    def animation_update(self, fig, ax,
+    def animation_update(self,
+                         fig,
+                         ax,
                          fe: Optional[int] = None,
                          t: Optional[float] = None,
                          t_arr: Optional[np.ndarray] = None,
@@ -283,7 +433,7 @@ class Motor3D:
         import matplotlib.pyplot as plt
         try:
             Tc_set = self.pyomo_sets['Tc_set']
-            Tc = utils.get_vals(self.pyomo_vars['Tc'], (Tc_set,))
+            Tc = utils.get_vals(self.pyomo_vars['Tc'], (Tc_set, ))
             plt.plot(Tc)
             plt.legend(Tc_set)
             plt.grid(True)
@@ -309,36 +459,40 @@ class Motor3D:
         return f'Motor3D(name="{self.name}", torque_bounds={self.torque_bounds}{tsl})'
 
 
-def add_torque(link, otherlink, about: str, name: Optional[str] = None, **kwargs):
+def add_torque(link, otherlink, about: Optional[str] = None, name: Optional[str] = None, **kwargs):
     name = utils.get_name(name, [link, otherlink], 'torque')
+    if about is not None:
+        motor = Motor3D(str(name), link.Rb_I, **kwargs)
+        link.nodes[name] = motor
+        motor.add_input_torques_at(otherlink, about=about)
+        return motor
+    else:
+        motor = Motor2D(str(name), link.Rb_I, **kwargs)
+        link.nodes[name] = motor
+        motor.add_input_torques_at(otherlink)
+        return motor
 
-    motor = Motor3D(str(name), link.Rb_I, **kwargs)
-    link.nodes[name] = motor
-    motor.add_input_torques_at(otherlink, about=about)
-    return motor
 
-
-def torques(robot_or_link: Union[System3D, 'Link3D']) -> List[Motor3D]:
+def torques(robot_or_link: Union[System3D, System2D, 'Link3D', 'Link2D']) -> List[Union[Motor3D, Motor2D]]:
     from typing import cast
 
     if isinstance(robot_or_link, System3D):
         robot = robot_or_link
-        return [cast(Motor3D, node)
-                for link in robot.links
-                for node in link.nodes.values()
-                if isinstance(node, Motor3D)]
+        return [
+            cast(Motor3D, node) for link in robot.links for node in link.nodes.values() if isinstance(node, Motor3D)
+        ]
+    elif isinstance(robot_or_link, System2D):
+        robot = robot_or_link
+        return [
+            cast(Motor2D, node) for link in robot.links for node in link.nodes.values() if isinstance(node, Motor2D)
+        ]
     else:
         link = robot_or_link
-        return [cast(Motor3D, node)
-                for node in link.nodes.values()
-                if isinstance(node, Motor3D)]
+        return [cast(Motor3D, node) for node in link.nodes.values() if isinstance(node, Motor3D)]
 
 
-def torque_squared_penalty(robot: 'System3D'):
-    return sum(
-        torque.torque_squared_cost()
-        for torque in torques(robot)
-    )
+def torque_squared_penalty(robot: Union['System3D', 'System2D']):
+    return sum(torque.torque_squared_cost() for torque in torques(robot))
 
 
 # TODO: this outputs an Iterator with `len(m.fe) * len(Tc_set)` elements
@@ -354,26 +508,15 @@ def power(motor: Motor3D, pyo_variables, fe: Optional[int] = None) -> Iterator:
 
         # ω * τ
         if fe is not None:
-            return (
-                rel_angle_vels_f[idx](v[fe, 1]) * Tc[fe, idx]
-                for idx in Tc_set
-            )
+            return (rel_angle_vels_f[idx](v[fe, 1]) * Tc[fe, idx] for idx in Tc_set)
         else:
-            return (
-                rel_angle_vels_f[idx](v[fe, 1]) * Tc[fe, idx]
-                for fe in m.fe
-                for idx in Tc_set
-            )
+            return (rel_angle_vels_f[idx](v[fe, 1]) * Tc[fe, idx] for fe in m.fe for idx in Tc_set)
     else:
-        raise RuntimeError(
-            'Current impementation requires a TorqueSpeedLimit :/')
+        raise RuntimeError('Current impementation requires a TorqueSpeedLimit :/')
 
 
 def work_penalty(robot: 'System3D'):
-    return sum(
-        sum(power(motor, robot.pyo_variables))
-        for motor in torques(robot)
-    )
+    return sum(sum(power(motor, robot.pyo_variables)) for motor in torques(robot))
 
 
 def work_squared_penalty(robot: 'System3D', with_time: bool):
@@ -384,28 +527,19 @@ def work_squared_penalty(robot: 'System3D', with_time: bool):
 
         # enumerate returns 0-based, pyomo expects 1-based
         return sum(
-            sum(hm[(fe % nfe)+1]*hm0*P**2
-                for (fe, P) in enumerate(power(motor, robot.pyo_variables)))
-            for motor in torques(robot)
-        )
+            sum(hm[(fe % nfe) + 1] * hm0 * P**2 for (fe, P) in enumerate(power(motor, robot.pyo_variables)))
+            for motor in torques(robot))
     else:
-        return sum(
-            sum(P**2 for P in power(motor, robot.pyo_variables))
-            for motor in torques(robot)
-        )
+        return sum(sum(P**2 for P in power(motor, robot.pyo_variables)) for motor in torques(robot))
 
 
 def max_power_constraint(robot: 'System3D', maxpower: float):
     def powerlimit_f(m, fe: int):
-        P = sum(
-            sum(power(motor, robot.pyo_variables, fe))
-            for motor in torques(robot)
-        )
+        P = sum(sum(power(motor, robot.pyo_variables, fe)) for motor in torques(robot))
         return P**2 <= maxpower**2
 
     constraintname = f'{robot.name}_maxpower'
     assert not hasattr(robot.m, constraintname), \
         f'The model already has a constraint with the name {constraintname}'
 
-    setattr(robot.m, constraintname,
-            pyo.Constraint(robot.m.fe, rule=powerlimit_f))
+    setattr(robot.m, constraintname, pyo.Constraint(robot.m.fe, rule=powerlimit_f))

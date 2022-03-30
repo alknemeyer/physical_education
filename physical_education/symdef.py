@@ -4,6 +4,31 @@ from typing import Iterable, Tuple
 
 USE_LATEX: bool = True
 
+def make_xy_syms(i: str) -> Tuple[Mat, Mat, Mat]:
+    """
+    Define x, y symbols and time derivatives, with subscript `i`
+
+    ## Usage
+
+    >>> xy, dxy = make_xy_syms('test')
+    >>> dxy
+    Matrix([
+    [\\dot{x}_{test}],
+    [\\dot{y}_{test}]])
+    """
+    global USE_LATEX
+    if USE_LATEX is True:
+        q = sp.symbols(r'x_{%s} y_{%s}' % (i, i))
+        dq = sp.symbols(r'\dot{x}_{%s} \dot{y}_{%s}' % (i, i))
+        ddq = sp.symbols(
+            r'\ddot{x}_{%s} \ddot{y}_{%s}' % (i, i))
+    else:
+        q = sp.symbols(f'    x_{i}   y_{i}')
+        dq = sp.symbols(f'  dx_{i}  dy_{i}')
+        ddq = sp.symbols(f'ddx_{i} ddy_{i}')
+
+    return Mat(q), Mat(dq), Mat(ddq)
+
 
 def make_xyz_syms(i: str) -> Tuple[Mat, Mat, Mat]:
     """
