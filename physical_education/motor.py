@@ -114,7 +114,6 @@ class _TorqueSpeedLimit:
             plt.gcf().savefig(f'{save_to}torque-scatterplot-{self.name}.pdf')
         else:
             plt.show()
-        plt.show()
 
         return ax
 

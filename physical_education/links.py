@@ -350,21 +350,22 @@ class Link2D:
             # plot using multiple axes, as in this SO link:
             # https://stackoverflow.com/a/45925049
             # or this: https://matplotlib.org/gallery/api/two_scales.html
-            if self.is_base:  # plot x,y separately to angle
+            if self.is_base and not self.is_fixed:  # plot x,y separately to angle
                 # typing this as 'Any' because the method accesses following give
                 # false warnings otherwise...
+                dim = 2
                 fig = plt.figure()
                 ax1 = plt.subplot()
-                ax1.plot(var[:, :2])
-                ax1.legend(list(q_set)[:2])
+                ax1.plot(var[:, :dim])
+                ax1.legend(list(q_set)[:dim])
                 ax1.set_ylabel('positions [m]')
                 ax1.set_xlabel('Finite element')
 
                 ax2 = ax1.twinx()
-                colors = [next(ax1._get_lines.prop_cycler)['color'] for _ in range(2)]
+                colors = [next(ax1._get_lines.prop_cycler)['color'] for _ in range(dim)]
                 for i, color in enumerate(colors):
                     ax2.plot(var[:, 2 + i], color=color)
-                ax2.legend(list(q_set)[2:])
+                ax2.legend(list(q_set)[dim:])
                 ax2.set_ylabel('angles [rad]')
 
             else:
