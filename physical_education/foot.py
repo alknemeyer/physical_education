@@ -383,7 +383,7 @@ class Foot3D:
         # the color trick below is so that they don't both use the same color
         color = next(ax1._get_lines.prop_cycler)['color']
         ax2.plot(fe, GRFz, label='$GRFz$', color=color)
-        ax2.set_ylabel('Force [Nm/body_weight]')
+        ax2.set_ylabel('Force [N/body_weight]')
 
         fig.legend(loc='center')
         fig.tight_layout()  # otherwise the right y-label is slightly clipped
