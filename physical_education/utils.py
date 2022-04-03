@@ -1,13 +1,11 @@
-from typing import (
-    Iterable, Callable, Optional, Tuple, List, TypeVar, Union, TYPE_CHECKING
-)
+from typing import (Iterable, Callable, Optional, Tuple, List, TypeVar, Union, TYPE_CHECKING)
 import sympy as sp
 import numpy as np
 from pyomo.environ import ConcreteModel, Var, Set, Param, RangeSet, Constraint
+import pyomo.environ as pyo
 from sympy import Matrix as Mat
 from .visual import info, debug, warn
 sp.init_printing()
-
 
 if TYPE_CHECKING:
     from .system import System3D
@@ -39,30 +37,31 @@ def rot(θ: SymOrFloat) -> Mat:
 
 def rot_x(θ: SymOrFloat) -> Mat:
     return sp.Matrix([
-        [1,         0,           0],
-        [0,  sp.cos(θ),  sp.sin(θ)],
-        [0, -sp.sin(θ),  sp.cos(θ)],
+        [1, 0, 0],
+        [0, sp.cos(θ), sp.sin(θ)],
+        [0, -sp.sin(θ), sp.cos(θ)],
     ])
 
 
 def rot_y(θ: SymOrFloat) -> Mat:
     return sp.Matrix([
         [sp.cos(θ), 0, -sp.sin(θ)],
-        [0,         1,          0],
-        [sp.sin(θ), 0,  sp.cos(θ)],
+        [0, 1, 0],
+        [sp.sin(θ), 0, sp.cos(θ)],
     ])
 
 
 def rot_z(θ: SymOrFloat) -> Mat:
     return sp.Matrix([
-        [sp.cos(θ),  sp.sin(θ), 0],
+        [sp.cos(θ), sp.sin(θ), 0],
         [-sp.sin(θ), sp.cos(θ), 0],
-        [0,                  0, 1],
+        [0, 0, 1],
     ])
 
 
 def euler_321(phi: SymOrFloat, theta: SymOrFloat, psi: SymOrFloat) -> Mat:
     return rot_x(phi) @ rot_y(theta) @ rot_z(psi)
+
 
 # utils to find equations of motion ##########################################
 
@@ -91,11 +90,7 @@ def skew_symmetric(Rx_I: Mat, q: Mat, dq: Mat) -> Mat:
         dRx_I[:, i] = Rx_I[:, i].jacobian(q) * dq
 
     omega_Rx = Rx_I.T @ dRx_I
-    return Mat([
-        omega_Rx[2, 1],
-        omega_Rx[0, 2],
-        omega_Rx[1, 0]
-    ])
+    return Mat([omega_Rx[2, 1], omega_Rx[0, 2], omega_Rx[1, 0]])
 
 
 def manipulator_equation(Ek: Mat, Ep: Mat, q: Mat, dq: Mat) -> Tuple[Mat, Mat, Mat]:
@@ -117,11 +112,13 @@ def manipulator_equation(Ek: Mat, Ep: Mat, q: Mat, dq: Mat) -> Tuple[Mat, Mat, M
     return M, C, G
 
 
-def calc_velocities_and_energies(
-        positions: Iterable[Mat], rotations: Iterable[Mat],
-        masses: Iterable[float], inertias: Iterable[Mat],
-        q: Mat, dq: Mat, g: float = 9.81
-) -> Tuple[Mat, Mat, List[Mat], List[Mat]]:
+def calc_velocities_and_energies(positions: Iterable[Mat],
+                                 rotations: Iterable[Mat],
+                                 masses: Iterable[float],
+                                 inertias: Iterable[Mat],
+                                 q: Mat,
+                                 dq: Mat,
+                                 g: float = 9.81) -> Tuple[Mat, Mat, List[Mat], List[Mat]]:
     """
         Calculate and return  the kinetic and potential energies of
         a system, given lists of:
@@ -135,17 +132,14 @@ def calc_velocities_and_energies(
     from functools import reduce
 
     dPs = [Mat(Px_I.jacobian(q) * dq) for Px_I in positions]
-    ang_vels = [
-        skew_symmetric(Rx_I, q, dq) for Rx_I in rotations
-    ]
+    ang_vels = [skew_symmetric(Rx_I, q, dq) for Rx_I in rotations]
     # this should be sum(), but it inits the sum with the int 0, which can't
     # be added to matrices
     Ek = reduce(lambda a, b: a + b, [
         dPx_I.T * mx * dPx_I / 2. + dωx_I.T * Ix * dωx_I / 2.
         for (dPx_I, mx, dωx_I, Ix) in zip(dPs, masses, ang_vels, inertias)
     ])
-    Ep = Mat([sum(m * Mat([0, 0, g]).dot(p)
-                  for (m, p) in zip(masses, positions))])
+    Ep = Mat([sum(m * Mat([0, 0, g]).dot(p) for (m, p) in zip(masses, positions))])
 
     return Ek, Ep, dPs, ang_vels
 
@@ -158,8 +152,11 @@ def norm(vec: Mat, eps: float):
     return sp.sqrt(x**2 + y**2 + z**2 + eps)
 
 
-def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
-                 display_vars: bool = False, test_func: bool = True,
+def lambdify_EOM(EOM: Union[sp.Matrix, list],
+                 vars_in_EOM: List[sp.Symbol],
+                 *,
+                 display_vars: bool = False,
+                 test_func: bool = True,
                  func_map: dict = {}) -> List[Callable[..., float]]:
     """ Returns a list of functions which, when called with arguments which match
     `vars_in_EOM`, will evaluate the equations of motion specified in `EOM`.
@@ -192,9 +189,7 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
         except:
             print(vars_in_EOM)
 
-    func_map = {'sin': pyomo.environ.sin,
-                'cos': pyomo.environ.cos,
-                'pi': math.pi, **func_map}
+    func_map = {'sin': pyomo.environ.sin, 'cos': pyomo.environ.cos, 'pi': math.pi, **func_map}
 
     if isinstance(EOM, list):
         eom = sp.Matrix(EOM)
@@ -204,33 +199,33 @@ def lambdify_EOM(EOM: Union[sp.Matrix, list], vars_in_EOM: List[sp.Symbol], *,
         eom = EOM
 
     if not set(eom.free_symbols).issubset(set(vars_in_EOM)):
-        raise ValueError('Some symbols in the eom aren\'t in `vars_in_EOM:'
-                         + str(set(eom.free_symbols).difference(set(vars_in_EOM))))
+        raise ValueError('Some symbols in the eom aren\'t in `vars_in_EOM:' +
+                         str(set(eom.free_symbols).difference(set(vars_in_EOM))))
 
     # Why pack the arguments into a vector? well... sympy lambdifies expressions
     # by writing out a function (key part!) and then calling `eval` on it. Unfortunately,
     # writing a python function with more than 255 arguments is a SyntaxError
-    funcs = [sp.lambdify([vars_in_EOM], eqn, modules=[func_map])  # type: ignore
-             for eqn in eom]
+    funcs = [
+        sp.lambdify([vars_in_EOM], eqn, modules=[func_map])  # type: ignore
+        for eqn in eom
+    ]
 
     # replace with set(EOM.free_symbols).difference(set(vars_in_EOM))?
     if test_func is True:
         vals = [random.random() for _ in range(len(vars_in_EOM))]
         for func in funcs:
             ret = func(vals)
-            assert type(ret) == float, (
-                "The function didn't return a float - it's likely "
-                "because there are symbolic variables in the EOM "
-                "which weren't specified in `vars_in_EOM`. Got: " + str(ret)
-            )
+            assert type(ret) == float, ("The function didn't return a float - it's likely "
+                                        "because there are symbolic variables in the EOM "
+                                        "which weren't specified in `vars_in_EOM`. Got: " + str(ret))
 
     return funcs
+
 
 # simplification #################################################################
 
 
-def parsimp_worker(_arg: Tuple['sp.Expression', 'sp.Expression'],
-                   allow_recur: bool = True):
+def parsimp_worker(_arg: Tuple['sp.Expression', 'sp.Expression'], allow_recur: bool = True):
     expr, simp_func = _arg
 
     if expr.is_number or expr.is_Symbol:
@@ -245,14 +240,12 @@ def parsimp_worker(_arg: Tuple['sp.Expression', 'sp.Expression'],
 
             args.append(simp_func(arg))
     else:
-        raise ValueError(f'Something is wrong here - got an object of type {type(expr)}'
-                         f' with value: {expr}')
+        raise ValueError(f'Something is wrong here - got an object of type {type(expr)}' f' with value: {expr}')
 
     return expr.func(*args)
 
 
-def parsimp(mat: Mat, nprocs: int,
-            f: Callable[['sp.Expression'], 'sp.Expression'] = sp.trigsimp) -> Mat:
+def parsimp(mat: Mat, nprocs: int, f: Callable[['sp.Expression'], 'sp.Expression'] = sp.trigsimp) -> Mat:
     import multiprocessing
     with multiprocessing.Pool(processes=nprocs) as p:
         return sp.Matrix(
@@ -262,6 +255,7 @@ def parsimp(mat: Mat, nprocs: int,
             # list(map(parsimp_worker, [(v, f) for v in mat]))
         ).reshape(*mat.shape)
 
+
 #     import sys
 #     outvals = []
 #         for i, val in enumerate(p.imap_unordered(parsimp_worker,
@@ -270,7 +264,6 @@ def parsimp(mat: Mat, nprocs: int,
 #             if disp_progress is True:
 #                 sys.stdout.write('\rSimplifying.... {0:%} done'.format(i/len(vec)))
 #     return sp.Matrix(outvals).reshape(vec.shape)
-
 
 T = TypeVar('T')
 
@@ -289,8 +282,8 @@ def base_link_of(model: 'System3D') -> 'Link3D':
     """
     return next(iter(link for link in model.links if link.is_base))
 
-# interpolation ##############################################################
 
+# interpolation ##############################################################
 
 PyomoThing = Union[Var, Set, Param, RangeSet]
 
@@ -323,7 +316,10 @@ def add_to_pyomo_model(m: ConcreteModel, prefix: str, vals: Iterable[Iterable[Py
         setattr(m, newname, v)
 
 
-def def_var(m: ConcreteModel, name: str, indexes: tuple, func: Callable,
+def def_var(m: ConcreteModel,
+            name: str,
+            indexes: tuple,
+            func: Callable,
             bounds: Tuple[Optional[float], Optional[float]] = (None, None)):
     """Define a variable, equal to the result of a function. Eg:
 
@@ -408,11 +404,10 @@ def constrain_total_time(m: ConcreteModel, total_time: float):
     >>> constrain_total_time(robot.m, total_time = (nfe-1)*robot.m.hm0.value)
     """
     remove_constraint_if_exists(m, 'total_time_constr')
-    m.total_time_constr = Constraint(
-        expr=sum(m.hm[fe] for fe in m.fe if fe != 1)*m.hm0 == total_time)
+    m.total_time_constr = Constraint(expr=sum(m.hm[fe] for fe in m.fe if fe != 1) * m.hm0 == total_time)
+
 
 # other utils for pyomo ######################################################
-
 
 # could default to 'ipopt', but there are often multiple
 # IPOPT installations on a given computer, so perhaps being
@@ -486,8 +481,7 @@ def default_solver(*,
             ipopt_path = IPOPT_PATH
         # better to make this warning, or hope that IPOPT is on their path?
         else:
-            warn('No path set for ipopt. Pass argument `ipopt_path`, '
-                 'or call `utils.set_ipopt_path(str)`', once=True)
+            warn('No path set for ipopt. Pass argument `ipopt_path`, ' 'or call `utils.set_ipopt_path(str)`', once=True)
 
     opt: Any = SolverFactory('ipopt', executable=ipopt_path)
     opt.options['print_level'] = 5
@@ -516,13 +510,13 @@ def default_solver(*,
     return opt
 
 
-def get_vals(var: Var, idxs: Optional[Tuple] = None) -> np.ndarray:
+def get_vals(var: Union[Var, Param], idxs: Optional[Tuple] = None) -> np.ndarray:
     m = var.model()
     assert isinstance(idxs, tuple) or idxs is None
 
     nfe = len(m.fe)
     ncp = len(m.cp)
-    arr = np.array([var[idx].value for idx in var]).astype(float)
+    arr = np.array([pyo.value(var[idx]) for idx in var]).astype(float)
 
     if idxs is None:  # assume indexed with only fe
         assert var.dim() == 1, "This variable doesn't seem to be indexed with fe exclusively"
@@ -539,14 +533,14 @@ def get_vals(var: Var, idxs: Optional[Tuple] = None) -> np.ndarray:
 
 
 # idxs: Tuple[Union[Set,RangeSet], ...]
-def get_vals_v(var: Var, idxs: tuple) -> np.ndarray:
+def get_vals_v(var: Union[Var, Param], idxs: tuple) -> np.ndarray:
     """
     Verbose version that doesn't try to guess stuff for ya. Usage:
 
     >>> get_vals(m.q, (m.N, m.DOF))
     """
     m = var.model()
-    arr = np.array([var[idx].value for idx in var]).astype(float)
+    arr = np.array([pyo.value(var[idx]) for idx in var]).astype(float)
     return arr.reshape(*(len(i) for i in idxs))
 
 
@@ -558,7 +552,7 @@ def get_indexes(nfe: int, ncp: int, *, one_based: bool, skipfirst: bool) -> List
         """
     offset = 1 if one_based else 0
     return [(i + offset, j + offset) for i in range(nfe) for j in range(ncp)
-            if (i > 0 or j == ncp-1 or not skipfirst)]
+            if (i > 0 or j == ncp - 1 or not skipfirst)]
 
 
 # https://stackoverflow.com/a/22424821/1892669
@@ -579,7 +573,7 @@ def has_variable_timestep(m: ConcreteModel) -> bool:
 
 
 def total_time(m: ConcreteModel) -> float:
-    return sum(m.hm[fe].value for fe in m.fe if fe != 1)*m.hm0.value
+    return sum(m.hm[fe].value for fe in m.fe if fe != 1) * m.hm0.value
 
 
 def get_name(name: Union[str, None], links: Iterable['Link3D'], suffix: str):
