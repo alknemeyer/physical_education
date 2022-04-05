@@ -335,62 +335,63 @@ class Foot3D:
             pass
 
     def plot(self, save_to: Optional[str] = None):
-        m = self.pyomo_vars['GRFxy'].model()
-        fe = list(range(len(m.fe)))
+        if not self.prevent_grf_estimation:
+            m = self.pyomo_vars['GRFxy'].model()
+            fe = list(range(len(m.fe)))
 
-        # xy_set  = self.pyomo_sets['xy_set']  # foot_xy_vel below
+            # xy_set  = self.pyomo_sets['xy_set']  # foot_xy_vel below
 
-        fric_set = self.pyomo_sets['fric_set']
-        contact_penalty = utils.get_vals(self.pyomo_vars['contact_penalty'])
-        friction_penalty = utils.get_vals(self.pyomo_vars['friction_penalty'])
-        slip_penalty = utils.get_vals(self.pyomo_vars['slip_penalty'], (fric_set, ))
+            fric_set = self.pyomo_sets['fric_set']
+            contact_penalty = utils.get_vals(self.pyomo_vars['contact_penalty'])
+            friction_penalty = utils.get_vals(self.pyomo_vars['friction_penalty'])
+            slip_penalty = utils.get_vals(self.pyomo_vars['slip_penalty'], (fric_set, ))
 
-        # TODO: plot GRFxy as an xy-thing? or individual line plots?
-        # GRFxy = utils.get_vals(self.pyomo_vars['GRFxy'], (fric_set,))
+            # TODO: plot GRFxy as an xy-thing? or individual line plots?
+            # GRFxy = utils.get_vals(self.pyomo_vars['GRFxy'], (fric_set,))
 
-        # foot_xy_vel = self.pyomo_vars['foot_xy_vel']
-        # gamma = self.pyomo_vars['gamma']
+            # foot_xy_vel = self.pyomo_vars['foot_xy_vel']
+            # gamma = self.pyomo_vars['gamma']
 
-        import matplotlib.pyplot as plt
+            import matplotlib.pyplot as plt
 
-        plt.plot(fe, contact_penalty, label='contact')
-        plt.plot(fe, friction_penalty, label='friction')
-        for fric in fric_set:
-            plt.plot(fe, slip_penalty[:, fric], label=f'slip_{fric}')
+            plt.plot(fe, contact_penalty, label='contact')
+            plt.plot(fe, friction_penalty, label='friction')
+            for fric in fric_set:
+                plt.plot(fe, slip_penalty[:, fric], label=f'slip_{fric}')
 
-        plt.title(f'Penalties in foot {self.name}')
-        plt.legend()
-        plt.grid(True)
-        plt.tight_layout()
+            plt.title(f'Penalties in foot {self.name}')
+            plt.legend()
+            plt.grid(True)
+            plt.tight_layout()
 
-        if save_to is not None:
-            plt.gcf().savefig(f'{save_to}penalties-{self.name}.pdf')
-        else:
-            plt.show()
+            if save_to is not None:
+                plt.gcf().savefig(f'{save_to}penalties-{self.name}.pdf')
+            else:
+                plt.show()
 
-        fig = plt.figure()
-        ax1 = plt.subplot()
-        plt.title('Foot height and ground reaction force in ' + self.name)
-        plt.grid(True)
+            fig = plt.figure()
+            ax1 = plt.subplot()
+            plt.title('Foot height and ground reaction force in ' + self.name)
+            plt.grid(True)
 
-        foot_height = utils.get_vals(self.pyomo_vars['foot_height'], tuple())
-        ax1.plot(fe, foot_height, label='Foot height')
-        ax1.set_xlabel('Finite element')
-        ax1.set_ylabel('Height [m]')
+            foot_height = utils.get_vals(self.pyomo_vars['foot_height'], tuple())
+            ax1.plot(fe, foot_height, label='Foot height')
+            ax1.set_xlabel('Finite element')
+            ax1.set_ylabel('Height [m]')
 
-        ax2 = ax1.twinx()
-        GRFz = utils.get_vals(self.pyomo_vars['GRFz'], tuple())
-        # the color trick below is so that they don't both use the same color
-        color = next(ax1._get_lines.prop_cycler)['color']
-        ax2.plot(fe, GRFz, label='$GRFz$', color=color)
-        ax2.set_ylabel('Force [N/body_weight]')
+            ax2 = ax1.twinx()
+            GRFz = utils.get_vals(self.pyomo_vars['GRFz'], tuple())
+            # the color trick below is so that they don't both use the same color
+            color = next(ax1._get_lines.prop_cycler)['color']
+            ax2.plot(fe, GRFz, label='$GRFz$', color=color)
+            ax2.set_ylabel('Force [N/body_weight]')
 
-        fig.legend(loc='center')
-        fig.tight_layout()  # otherwise the right y-label is slightly clipped
-        if save_to is not None:
-            plt.gcf().savefig(f'{save_to}{self.name}-footheight-force.pdf')
-        else:
-            plt.show()
+            fig.legend(loc='center')
+            fig.tight_layout()  # otherwise the right y-label is slightly clipped
+            if save_to is not None:
+                plt.gcf().savefig(f'{save_to}{self.name}-footheight-force.pdf')
+            else:
+                plt.show()
 
     def __repr__(self) -> str:
         return f'Foot3D(name="{self.name}", nsides={self.nsides}, friction_coeff={self.friction_coeff})'
