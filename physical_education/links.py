@@ -39,7 +39,8 @@ class Link2D:
         - `parent_orientation`: if provided, a relative angle formulation is used instead of the default absolute
         - `meta`: information which qualitatively describes a link, like 'spine', 'leg', etc
         """
-        assert (base is False) ^ (fixed is True), 'A link cannot be be a fixed base without being the base link'
+        if fixed is True:
+            assert base is True, 'A link cannot be be a fixed base without being the base link'
         assert (start_I is not None) ^ (base is True), \
             'A link must either be given an offset, or be a base link'
 
