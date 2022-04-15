@@ -83,6 +83,10 @@ class System2D:
         C = simp_func(C)
         G = simp_func(G)
 
+        # foot stuff
+        from . import foot
+        feet = foot.feet(self)
+
         Q = sp.zeros(*q.shape)
         for link in self.links:
             Q += link.calc_eom(q, dq, ddq)
@@ -94,6 +98,8 @@ class System2D:
             force: force * self.force_scale
             for force in [  # TODO: this should be done by the links themselves!
                 *flatten(torque.input_torque for torque in motor.torques(self)),
+                *flatten(foot.Lx for foot in feet),
+                *[foot.Ly for foot in feet],
             ]
         }
 
