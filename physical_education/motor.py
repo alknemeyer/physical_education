@@ -235,12 +235,12 @@ class Motor2D:
             for idx, T in enumerate(self.pyomo_sets['Tc_set']):
                 utils.maybe_set_var(self.pyomo_vars['Tc'][fed, T], data['Tc'][fes, idx], **kwargs)
 
-    def torque_squared_cost(self):
+    def torque_squared_cost(self, weight: float = 1.0):
         # TODO: add an option to scale by time and body weight?
         # previous tests slowed things down quite a bit, so I'm not sure
         # it's worth it, especially since we're not actually doing global
         # optimization in any case
-        return sum([Tc**2 for Tc in self.pyomo_vars['Tc'][:, :]])
+        return sum([(weight * Tc)**2 for Tc in self.pyomo_vars['Tc'][:, :]])
 
     def animation_setup(self, fig, ax, data: List[List[float]]):
         pass
@@ -406,12 +406,12 @@ class Motor3D:
             for idx, T in enumerate(self.pyomo_sets['Tc_set']):
                 utils.maybe_set_var(self.pyomo_vars['Tc'][fed, T], data['Tc'][fes, idx], **kwargs)
 
-    def torque_squared_cost(self):
+    def torque_squared_cost(self, weight: float = 1.0):
         # TODO: add an option to scale by time and body weight?
         # previous tests slowed things down quite a bit, so I'm not sure
         # it's worth it, especially since we're not actually doing global
         # optimization in any case
-        return sum([Tc**2 for Tc in self.pyomo_vars['Tc'][:, :]])
+        return sum([(weight * Tc)**2 for Tc in self.pyomo_vars['Tc'][:, :]])
 
     def animation_setup(self, fig, ax, data: List[List[float]]):
         pass
@@ -490,8 +490,11 @@ def torques(robot_or_link: Union[System3D, System2D, 'Link3D', 'Link2D']) -> Lis
         return [cast(Motor3D, node) for node in link.nodes.values() if isinstance(node, Motor3D)]
 
 
-def torque_squared_penalty(robot: Union['System3D', 'System2D']):
-    return sum(torque.torque_squared_cost() for torque in torques(robot))
+def torque_squared_penalty(robot: Union['System3D', 'System2D'], weights: Optional[List[float]] = None):
+    if weights is not None:
+        return sum(torque.torque_squared_cost(weights[idx]) for idx, torque in enumerate(torques(robot)))
+    else:
+        return sum(torque.torque_squared_cost() for torque in torques(robot))
 
 
 # TODO: this outputs an Iterator with `len(m.fe) * len(Tc_set)` elements
