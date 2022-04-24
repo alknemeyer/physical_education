@@ -306,6 +306,8 @@ class Motor3D:
 
         # a list of tuples of [torques_on_body, rotation, about] on other bodies
         self.other_bodies: List[Tuple[Mat, Mat, str]] = []
+        # Keep track of relative velocity of the links on the motor.
+        self.relative_angle_velocities: List['sp.Expression'] = []
 
     def add_input_torques_at(self, otherlink: 'Link3D', about: str):
         """ Add input torques between two links, about axis `about` of `self`
@@ -337,13 +339,13 @@ class Motor3D:
             dW = Mat([torques_on_body.dot(ang_vel)])
             Q += dW.jacobian(dq).T
 
-            if hasattr(self, 'torque_speed_limit'):
-                for ax in about:
+            for ax in about:
+                if hasattr(self, 'torque_speed_limit'):
                     self.torque_speed_limit.add_rel_vel(
                         (ang_vel_body - ang_vel)['xyz'.index(ax)],
                         ax,
                     )
-
+                self.relative_angle_velocities.append((ang_vel_body - ang_vel)['xyz'.index(ax)])
         return Q
 
     def add_vars_to_pyomo_model(self, m: pyo.ConcreteModel) -> None:
@@ -377,6 +379,7 @@ class Motor3D:
 
     def add_equations_to_pyomo_model(self, sp_variables: List[sp.Symbol], pyo_variables: 'VariableList',
                                      collocation: str):
+        self.rel_angle_vels_f = utils.lambdify_EOM(self.relative_angle_velocities, sp_variables)
         if hasattr(self, 'torque_speed_limit'):
             self.torque_speed_limit.add_equations_to_pyomo_model(sp_variables, pyo_variables, collocation,
                                                                  self.pyomo_vars['Tc'], self.pyomo_sets['Tc_set'])
@@ -500,21 +503,22 @@ def torque_squared_penalty(robot: Union['System3D', 'System2D'], weights: Option
 # TODO: this outputs an Iterator with `len(m.fe) * len(Tc_set)` elements
 # perhaps an Iterator of Iterators would make more sense?
 def power(motor: Motor3D, pyo_variables, fe: Optional[int] = None) -> Iterator:
-    if hasattr(motor, 'torque_speed_limit'):
-        rel_angle_vels_f = motor.torque_speed_limit.rel_angle_vels_f
+    # if hasattr(motor, 'torque_speed_limit'):
+    # rel_angle_vels_f = motor.torque_speed_limit.rel_angle_vels_f
+    rel_angle_vels_f = motor.rel_angle_vels_f
 
-        Tc = motor.pyomo_vars['Tc']
-        Tc_set = motor.pyomo_sets['Tc_set']
-        m = Tc.model()
-        v = pyo_variables
+    Tc = motor.pyomo_vars['Tc']
+    Tc_set = motor.pyomo_sets['Tc_set']
+    m = Tc.model()
+    v = pyo_variables
 
-        # ω * τ
-        if fe is not None:
-            return (rel_angle_vels_f[idx](v[fe, 1]) * Tc[fe, idx] for idx in Tc_set)
-        else:
-            return (rel_angle_vels_f[idx](v[fe, 1]) * Tc[fe, idx] for fe in m.fe for idx in Tc_set)
+    # ω * τ
+    if fe is not None:
+        return (rel_angle_vels_f[idx](v[fe, 1]) * Tc[fe, idx] for idx in Tc_set)
     else:
-        raise RuntimeError('Current impementation requires a TorqueSpeedLimit :/')
+        return (rel_angle_vels_f[idx](v[fe, 1]) * Tc[fe, idx] for fe in m.fe for idx in Tc_set)
+    # else:
+    #     raise RuntimeError('Current impementation requires a TorqueSpeedLimit :/')
 
 
 def work_penalty(robot: 'System3D'):
