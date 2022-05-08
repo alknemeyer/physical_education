@@ -374,6 +374,7 @@ class Foot3D:
         self.GRFxy_max = GRFxy_max
         self.GRFz_max = GRFz_max
         self.prevent_grf_estimation = False
+        self.contact_error_threshold: Optional[float] = None
 
         # the contact/friction stuff:
         self.D = friction_polygon(nsides)
@@ -386,11 +387,13 @@ class Foot3D:
             'force_scale': 1,
         }
 
-    def enable_contact_estimation(self, enable: bool):
+    def enable_contact_estimation(self, enable: bool, error_threshold: Optional[float] = None):
         # Note, this should be called prior to construction of the pyomo model.
         # This prevents the estimation of contact forces and instead relies on an external
         # data source to provide the contact forces.
         self.prevent_grf_estimation = not enable
+        if error_threshold is not None:
+            self.contact_error_threshold = error_threshold
 
     def calc_eom(self, q: Mat, dq: Mat, ddq: Mat) -> Mat:
         jac = self.Pb_I.jacobian(q)
@@ -561,7 +564,8 @@ class Foot3D:
                 if fe < m.fe[-1]:
                     α = sum(foot_height[fe + 1, :])
                     β = sum(GRFz[fe, :])
-                    return α * β <= contact_penalty[fe]
+                    return α * β <= self.contact_error_threshold if self.contact_error_threshold is not None else α * β <= contact_penalty[
+                        fe]
                 else:
                     return Constraint.Skip
 
@@ -571,7 +575,8 @@ class Foot3D:
             def def_friction_complementarity(m, fe):
                 α = friction_coeff * sum(GRFz[fe, :]) - sum(GRFxy[fe, :, :])
                 β = sum(gamma[fe, :])
-                return α * β <= friction_penalty[fe]
+                return α * β <= self.contact_error_threshold if self.contact_error_threshold is not None else α * β <= friction_penalty[
+                    fe]
 
             add_constraints('friction_complementarity_constr', def_friction_complementarity, (m.fe, ))
 
@@ -580,7 +585,8 @@ class Foot3D:
                 vx, vy = foot_xy_vel[fe, :, 'x'], foot_xy_vel[fe, :, 'y']
                 α = sum(GRFxy[fe, :, i])
                 β = sum(gamma[fe, :]) + sum(vx) * self.D[i, 0] + sum(vy) * self.D[i, 1]
-                return α * β <= slip_penalty[fe, i]
+                return α * β <= self.contact_error_threshold if self.contact_error_threshold is not None else α * β <= slip_penalty[
+                    fe, i]
 
             add_constraints('slip_complementarity_constr', def_slip_complementarity, (m.fe, fric_set))
 
