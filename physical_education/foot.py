@@ -419,9 +419,19 @@ class Foot3D:
         gamma = Var(m.fe, m.cp, name='gamma (foot xy-velocity magnitude)', bounds=(0, None))
 
         # penalty variables
-        contact_penalty = Var(m.fe, name='contact_penalty', bounds=(0, 1), initialize=0)
-        friction_penalty = Var(m.fe, name='friction_penalty', bounds=(0, 1), initialize=0)
-        slip_penalty = Var(m.fe, fric_set, name='slip_penalty', bounds=(0, 1), initialize=0)
+        contact_penalty = Var(m.fe,
+                              name='contact_penalty',
+                              bounds=(0, 1 if self.contact_error_threshold is None else self.contact_error_threshold),
+                              initialize=0)
+        friction_penalty = Var(m.fe,
+                               name='friction_penalty',
+                               bounds=(0, 1 if self.contact_error_threshold is None else self.contact_error_threshold),
+                               initialize=0)
+        slip_penalty = Var(m.fe,
+                           fric_set,
+                           name='slip_penalty',
+                           bounds=(0, 1 if self.contact_error_threshold is None else self.contact_error_threshold),
+                           initialize=0)
 
         self.pyomo_vars: Dict[str, Var] = {
             'GRFxy': GRFxy,
@@ -564,8 +574,7 @@ class Foot3D:
                 if fe < m.fe[-1]:
                     α = sum(foot_height[fe + 1, :])
                     β = sum(GRFz[fe, :])
-                    return α * β <= self.contact_error_threshold if self.contact_error_threshold is not None else α * β <= contact_penalty[
-                        fe]
+                    return α * β <= contact_penalty[fe]
                 else:
                     return Constraint.Skip
 
@@ -575,8 +584,7 @@ class Foot3D:
             def def_friction_complementarity(m, fe):
                 α = friction_coeff * sum(GRFz[fe, :]) - sum(GRFxy[fe, :, :])
                 β = sum(gamma[fe, :])
-                return α * β <= self.contact_error_threshold if self.contact_error_threshold is not None else α * β <= friction_penalty[
-                    fe]
+                return α * β <= friction_penalty[fe]
 
             add_constraints('friction_complementarity_constr', def_friction_complementarity, (m.fe, ))
 
@@ -585,8 +593,7 @@ class Foot3D:
                 vx, vy = foot_xy_vel[fe, :, 'x'], foot_xy_vel[fe, :, 'y']
                 α = sum(GRFxy[fe, :, i])
                 β = sum(gamma[fe, :]) + sum(vx) * self.D[i, 0] + sum(vy) * self.D[i, 1]
-                return α * β <= self.contact_error_threshold if self.contact_error_threshold is not None else α * β <= slip_penalty[
-                    fe, i]
+                return α * β <= slip_penalty[fe, i]
 
             add_constraints('slip_complementarity_constr', def_slip_complementarity, (m.fe, fric_set))
 
