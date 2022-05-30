@@ -711,11 +711,13 @@ class System3D:
                 view_along: Union[Tuple[float, float], str],
                 t_scale: float = 1.,
                 camera: Optional[Union[Tuple[float, float], Tuple[float, float, float]]] = None,
+                aspect_ratio: Optional[Tuple[float, float, float]] = None,
                 lim: Optional[float] = None,
                 plot3d_config: Dict = {},
                 lims: Optional[Tuple[Tuple, Tuple, Tuple]] = None,
                 track: Optional[str] = None,
                 dt: Optional[float] = None,
+                plotgrass: bool = False,
                 save_to: Optional[str] = None,
                 use_html5_video: bool = True):
         # need to import this to get 3D plots working, for some reason
@@ -727,15 +729,17 @@ class System3D:
 
         # typing this as 'Any' because the method accesses following give
         # false warnings otherwise...
-        fig, ax, add_ground = visual.plot3d_setup(scale_plot_size=False, **plot3d_config)
-
+        fig, ax, add_ground = visual.plot3d_setup(scale_plot_size=True, **plot3d_config)
+        if aspect_ratio:
+            ax.set_box_aspect(aspect_ratio)
         if lims is not None:
             x, y, z = lims
             ax.set_xlim(*x)
             ax.set_ylim(*y)
             ax.set_zlim(*z)
 
-            visual.plotgrass(ax, *x, *y)
+            if plotgrass:
+                visual.plotgrass(ax, *x, *y)
 
         visual.set_view(ax, along=view_along)
         ground = add_ground(((0, 0), (0, 0)))
