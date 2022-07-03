@@ -5,6 +5,7 @@ from pyomo.environ import ConcreteModel, Var, Set, Param, RangeSet, Constraint
 import pyomo.environ as pyo
 from sympy import Matrix as Mat
 from .visual import info, debug, warn
+
 sp.init_printing()
 
 if TYPE_CHECKING:
@@ -413,11 +414,45 @@ def constrain_total_time(m: ConcreteModel, total_time: float):
 # IPOPT installations on a given computer, so perhaps being
 # explicit is better than implicit
 IPOPT_PATH: Union[str, None] = None
+SNOPT_PATH: Union[str, None] = None
 
 
 def set_ipopt_path(ipopt_path: str):
     global IPOPT_PATH
     IPOPT_PATH = ipopt_path
+
+
+def set_snopt_path(snopt_path: str):
+    global SNOPT_PATH
+    SNOPT_PATH = snopt_path
+
+
+def snopt_solver(*, snopt_path: Optional[str] = None, max_iter: int = 50_000, **kwargs):
+    import os
+    from datetime import datetime
+    from pyomo.opt import SolverFactory
+    from typing import Any
+
+    if snopt_path is None:
+        if SNOPT_PATH is not None:
+            snopt_path = SNOPT_PATH
+        # better to make this warning, or hope that SNOPT is on their path?
+        else:
+            warn('No path set for snopt. Pass argument `snopt_path`, ' 'or call `utils.set_snopt_path(str)`', once=True)
+
+    opt: Any = SolverFactory('snopt', executable=snopt_path)
+    opt.options['outlev'] = 2
+    opt.options['iterations_limit'] = max_iter
+    opt.options['major_feasibility_tolerance'] = 1e-3
+    opt.options['minor_feasibility_tolerance'] = 1e-3
+    opt.options['major_optimality_tolerance'] = 1e-3
+
+    for key, val in kwargs.items():
+        opt.options[key] = val
+
+    tstart = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    info(f'Optimization start time: {tstart}')
+    return opt
 
 
 def default_solver(*,
