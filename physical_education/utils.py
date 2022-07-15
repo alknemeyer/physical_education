@@ -442,6 +442,7 @@ def snopt_solver(*, snopt_path: Optional[str] = None, max_iter: int = 50_000, **
 
     opt: Any = SolverFactory('snopt', executable=snopt_path)
     opt.options['outlev'] = 2
+    opt.options['print_file'] = 1
     opt.options['iterations_limit'] = max_iter
     opt.options['major_feasibility_tolerance'] = 1e-3
     opt.options['minor_feasibility_tolerance'] = 1e-3
