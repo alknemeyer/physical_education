@@ -479,8 +479,8 @@ class System3D:
             ]
         }
 
-        eom = M @ ddq + C + G - B
-        eom = simp_func(Mat([*eom, *angle_constraints]).xreplace(to_sub))
+        self.eom = M @ ddq + C + G - B
+        eom = simp_func(Mat([*self.eom, *angle_constraints]).xreplace(to_sub))
 
         # eom_c = M @ ddq + G - B
         # eom_c = simp_func(Mat([*eom_c, *angle_constraints]).xreplace(to_sub))
@@ -718,6 +718,7 @@ class System3D:
                 track: Optional[str] = None,
                 dt: Optional[float] = None,
                 plotgrass: bool = False,
+                plot_com: bool = True,
                 save_to: Optional[str] = None,
                 use_html5_video: bool = True):
         # need to import this to get 3D plots working, for some reason
@@ -749,10 +750,23 @@ class System3D:
 
         cp = ncp
         data: List[List[float]] = [[v.value for v in self.pyo_variables[fe, cp]] for fe in self.m.fe]
+        self.plot_com = plot_com
+        if self.plot_com:
+            pos_funcs = [utils.lambdify_EOM(link.Pb_I, link._sp_variables) for link in self.links]
+            total_mass = sum(link.mass for link in self.links)
+            self.com_position = np.empty((len(data), 3))
+            for idx, d in enumerate(data):
+                com_pos = [0] * 3
+                for i, link in enumerate(self.links):
+                    for j, f in enumerate(pos_funcs[i]):
+                        com_pos[j] += link.mass * f(d)
+                com_pos = np.asarray(com_pos)
+                com_pos *= 1 / total_mass
+                self.com_position[idx, :] = com_pos
 
         for link in self.links:
             link.animation_setup(fig, ax, data)
-
+        self.com, = ax.plot(self.com_position[0, 0], self.com_position[0, 1], self.com_position[0, 2], 'o', color='g')
         if camera is not None and lim is not None:
             visual.track_pt(ax, camera, lim)
 
@@ -772,6 +786,9 @@ class System3D:
 
                 for link in self.links:
                     link.animation_update(fig, ax, fe=fe, track=(track == link.name))
+                if self.plot_com:
+                    self.com.set_data([self.com_position[fe - 1, 0]], [self.com_position[fe - 1, 1]])
+                    self.com.set_3d_properties([self.com_position[fe - 1, 2]], 'z')
 
                 nonlocal ground
                 ground.remove()
