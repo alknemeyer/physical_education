@@ -609,7 +609,10 @@ def has_variable_timestep(m: ConcreteModel) -> bool:
 
 
 def total_time(m: ConcreteModel) -> float:
-    return sum(m.hm[fe].value for fe in m.fe if fe != 1) * m.hm0.value
+    if has_variable_timestep(m):
+        return sum(m.hm[fe].value for fe in m.fe if fe != 1) * m.hm0.value
+    else:
+        return float((len(m.fe) - 1) * m.hm0.value)
 
 
 def get_name(name: Union[str, None], links: Iterable['Link3D'], suffix: str):
