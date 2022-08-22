@@ -535,6 +535,8 @@ def default_solver(*,
     opt.options['linear_solver'] = solver
     if solver == 'ma86':
         opt.options['OF_ma86_scaling'] = 'none'
+    elif solver == 'ma97':
+        opt.options['OF_ma97_scaling'] = 'none'
     else:
         warn(f'Got solver {solver} but don\'t have any specific flags for it.')
 
