@@ -552,12 +552,18 @@ class System3D:
             m.force_scale = Param(initialize=scale_forces_by)
 
             if include_eom_slack:
-                m.slack_eom = Var(m.fe, m.cp, range(len(self.eom_f)), initialize=0.0, bounds=(-15, 15))
+                m.slack_eom = Var(m.fe, m.cp, range(len(self.eom)), initialize=0.0, bounds=(-0.1, 0.1))
 
                 @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))
                 def EOM_constr(m, fe, cp, i):
-                    return self.eom_f[i]([*self.pyo_variables[fe, cp], m.force_scale]) == m.force_scale * m.slack_eom[fe, cp, i] \
-                        if not (fe == 1 and cp < ncp) else Constraint.Skip
+                    if not (fe == 1 and cp < ncp):
+                        if i < len(self.eom):
+                            return self.eom_f[i]([*self.pyo_variables[fe, cp],
+                                                  m.force_scale]) == m.force_scale * m.slack_eom[fe, cp, i]
+                        else:
+                            return self.eom_f[i]([*self.pyo_variables[fe, cp], m.force_scale]) == 0
+                    else:
+                        return Constraint.Skip
             else:
 
                 @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))

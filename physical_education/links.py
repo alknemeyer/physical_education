@@ -602,10 +602,10 @@ class Link3D:
         q = pyo.Var(m.fe, m.cp, q_set, name='q', bounds=(-100, 100))
         dq = pyo.Var(m.fe, m.cp, q_set, name='dq', bounds=(-1000, 1000))
         # the bounds are more or less arbitrary!
-        ddq = pyo.Var(m.fe, m.cp, q_set, name='ddq', bounds=(-10_000, 10_000))
+        ddq = pyo.Var(m.fe, m.cp, q_set, name='ddq', bounds=(-100_000, 100_000))
 
         # constraint (reaction) forces (multiples of BW)
-        Fr = pyo.Var(m.fe, m.cp, Fr_set, name='Fr', bounds=(-2, 2))
+        Fr = pyo.Var(m.fe, m.cp, Fr_set, name='Fr', bounds=(-10, 10))
 
         mass = pyo.Param(initialize=self.mass, name='mass')
         length = pyo.Param(initialize=self.length, name='length')
@@ -915,31 +915,37 @@ def constrain_rel_angle(m: pyo.ConcreteModel, constr_name: str, lowerbound: floa
 
     # what follows is some _horribly_ hacky code...
     # one iterable each for upper and lower bounds
-    ang_1_up = iter(angle1)
-    ang_1_lo = iter(angle1)
-    ang_2_up = iter(angle2)
-    ang_2_lo = iter(angle2)
+    ang_1_itr = iter(angle1)
+    ang_2_itr = iter(angle2)
 
     # _fe and _cp are unused
     # pyomo.environ.inequality is unused, but seems like it would be
     # for this. I recall due to some bug with it.
     # Could be worth sorting that out?
-    def func(m: pyo.ConcreteModel, _fe, _cp, bound: str):
-        if bound == '+':
-            ang1 = next(ang_1_up)
-            ang2 = next(ang_2_up)
-            # make sure fe/cp match up for both links
-            assert ang1.index()[:2] == ang2.index()[:2]
-            return ang1 - ang2 <= upperbound
-        elif bound == '-':
-            ang1 = next(ang_1_lo)
-            ang2 = next(ang_2_lo)
-            # make sure fe/cp match up for both links
-            assert ang1.index()[:2] == ang2.index()[:2]
-            return lowerbound <= ang1 - ang2
+    # def func(m: pyo.ConcreteModel, _fe, _cp, bound: str):
+    #     if bound == '+':
+    #         ang1 = next(ang_1_up)
+    #         ang2 = next(ang_2_up)
+    #         # make sure fe/cp match up for both links
+    #         assert ang1.index()[:2] == ang2.index()[:2]
+    #         return ang1 - ang2 <= upperbound
+    #     elif bound == '-':
+    #         ang1 = next(ang_1_lo)
+    #         ang2 = next(ang_2_lo)
+    #         # make sure fe/cp match up for both links
+    #         assert ang1.index()[:2] == ang2.index()[:2]
+    #         return lowerbound <= ang1 - ang2
+
+    def func(m: pyo.ConcreteModel, _fe, _cp):
+        ang1 = next(ang_1_itr)
+        ang2 = next(ang_2_itr)
+        # make sure fe/cp match up for both links
+        assert ang1.index()[:2] == ang2.index()[:2]
+        return (lowerbound, ang1 - ang2, upperbound)
 
     name = f'rel_angle_{constr_name}'
-    setattr(m, name, pyo.Constraint(m.fe, m.cp, ('+', '-'), rule=func))
+    # setattr(m, name, pyo.Constraint(m.fe, m.cp, ('+', '-'), rule=func))
+    setattr(m, name, pyo.Constraint(m.fe, m.cp, rule=func))
 
     # def func(m: pyo.ConcreteModel, ang1, ang2, bound: str):
     #     # make sure fe/cp match up for both links

@@ -549,3 +549,12 @@ def max_power_constraint(robot: 'System3D', maxpower: float):
         f'The model already has a constraint with the name {constraintname}'
 
     setattr(robot.m, constraintname, pyo.Constraint(robot.m.fe, rule=powerlimit_f))
+
+
+def constrain_torque(m: pyo.ConcreteModel, Tc_set: pyo.Set, constr_name: str, torque: pyo.Var, lowerbound: float,
+                     upperbound: float):
+    """
+    >>> constrain_torque(robot.m, 'knee', idx, knee, -0.5, , 0.5)
+    """
+    name = f'torque_limits_{constr_name}'
+    setattr(m, name, pyo.Constraint(m.fe, Tc_set, rule=lambda m, fe, idx: (lowerbound, torque[fe, idx], upperbound)))
