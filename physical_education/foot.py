@@ -360,6 +360,9 @@ class Foot2D:
 
 
 class Foot3D:
+    # Set the ground plane height so that the foot height can be determined.
+    ground_plane_height: float = 0.0
+
     def __init__(self,
                  name: str,
                  Pb_I: Mat,
@@ -525,7 +528,7 @@ class Foot3D:
         def def_foot_height(m, fe, cp):  # foot height above z == 0 (xy-plane)
             if (fe == 1 and cp < ncp):
                 return Constraint.Skip
-            return foot_height[fe, cp] == self.foot_pos_func[2](pyo_variables[fe, cp])
+            return foot_height[fe, cp] == self.foot_pos_func[2](pyo_variables[fe, cp]) - Foot3D.ground_plane_height
 
         add_constraints('foot_height_constr', def_foot_height, (m.fe, m.cp))
 
