@@ -967,7 +967,7 @@ def prescribe_contact_order(feet: Iterable[Foot3D],
                 GRFz[fe, cp].setlb(min_GRFz)
 
         # phase 3: flight
-        for fe in inclusive_range(stop + 1, nfe):
+        for fe in inclusive_range(stop, nfe):
             for cp in m.cp:
                 foot_height[fe, cp].setlb(min_foot_height)
                 GRFz[fe, cp].fix(0)
