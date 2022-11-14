@@ -503,6 +503,7 @@ class System3D:
                          vary_timestep_within: Optional[Tuple[float, float]] = None,
                          presolve_no_C: bool = False,
                          include_dynamics: bool = True,
+                         bound_eom_error: Optional[Tuple[float, float]] = None,
                          include_eom_slack: bool = False) -> None:
         """
         vary_timestep_within:
@@ -552,7 +553,7 @@ class System3D:
             m.force_scale = Param(initialize=scale_forces_by)
 
             if include_eom_slack:
-                m.slack_eom = Var(m.fe, m.cp, range(len(self.eom)), initialize=0.0, bounds=(-0.1, 0.1))
+                m.slack_eom = Var(m.fe, m.cp, range(len(self.eom)), initialize=0.0, bounds=bound_eom_error)
 
                 @m.Constraint(m.fe, m.cp, range(len(self.eom_f)))
                 def EOM_constr(m, fe, cp, i):
