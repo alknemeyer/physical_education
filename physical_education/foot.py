@@ -376,7 +376,7 @@ class Foot3D:
         self.friction_coeff = friction_coeff
         self.GRFxy_max = GRFxy_max
         self.GRFz_max = GRFz_max
-        self.prevent_grf_estimation = False
+        self.disable_lcp_constraints = False
         self.contact_error_threshold: Optional[float] = None
 
         # the contact/friction stuff:
@@ -390,11 +390,9 @@ class Foot3D:
             'force_scale': 1,
         }
 
-    def enable_contact_estimation(self, enable: bool, error_threshold: Optional[float] = None):
+    def enable_lcp(self, enable: bool, error_threshold: Optional[float] = None):
         # Note, this should be called prior to construction of the pyomo model.
-        # This prevents the estimation of contact forces and instead relies on an external
-        # data source to provide the contact forces.
-        self.prevent_grf_estimation = not enable
+        self.disable_lcp_constraints = not enable
         if error_threshold is not None:
             self.contact_error_threshold = error_threshold
 
@@ -417,8 +415,9 @@ class Foot3D:
         GRFz = Var(m.fe, m.cp, name='GRFz', bounds=(0, self.GRFz_max))
 
         # dummy vars equal to parts from EOM
-        foot_height = Var(m.fe, m.cp, name='foot_height', bounds=(0, None))
+        foot_height = Var(m.fe, m.cp, name='foot_height', bounds=None if self.disable_lcp_constraints else (0, None))
         foot_xy_vel = Var(m.fe, m.cp, xy_set, name='foot_xyvel')
+        foot_z_vel = Var(m.fe, m.cp, name='foot_zvel')
         gamma = Var(m.fe, m.cp, name='gamma (foot xy-velocity magnitude)', bounds=(0, None))
 
         # penalty variables
@@ -441,6 +440,7 @@ class Foot3D:
             'GRFz': GRFz,
             'foot_height': foot_height,
             'foot_xy_vel': foot_xy_vel,
+            'foot_z_vel': foot_z_vel,
             'gamma': gamma,
             'contact_penalty': contact_penalty,
             'friction_penalty': friction_penalty,
@@ -519,6 +519,11 @@ class Foot3D:
         m = friction_coeff.model()
 
         foot_height = self.pyomo_vars['foot_height']
+        foot_xy_vel = self.pyomo_vars['foot_xy_vel']
+        foot_z_vel = self.pyomo_vars['foot_z_vel']
+        gamma = self.pyomo_vars['gamma']
+        xy_set = self.pyomo_sets['xy_set']  # foot_xy_vel below
+        fric_set = self.pyomo_sets['fric_set']
         self.foot_pos_func = utils.lambdify_EOM(self.Pb_I, sp_variables)
         ncp = len(m.cp)
 
@@ -532,37 +537,38 @@ class Foot3D:
 
         add_constraints('foot_height_constr', def_foot_height, (m.fe, m.cp))
 
-        if not self.prevent_grf_estimation:
-            xy_set = self.pyomo_sets['xy_set']  # foot_xy_vel below
-            fric_set = self.pyomo_sets['fric_set']
+        self.foot_vel_func = utils.lambdify_EOM(self.Pb_I_vel, sp_variables)
 
+        def def_foot_z_vel(m, fe, cp):  # foot velocity in vertical plane z
+            if (fe == 1 and cp < ncp):
+                return Constraint.Skip
+            return foot_z_vel[fe, cp] == self.foot_vel_func[2](pyo_variables[fe, cp])
+
+        add_constraints('foot_z_vel_constr', def_foot_z_vel, (m.fe, m.cp))
+
+        def def_foot_xy_vel(m, fe, cp, xy):  # foot velocity in xy-plane
+            if (fe == 1 and cp < ncp):
+                return Constraint.Skip
+            i = 0 if xy == 'x' else 1
+            return foot_xy_vel[fe, cp, xy] == self.foot_vel_func[i](pyo_variables[fe, cp])
+
+        add_constraints('foot_xy_vel_constr', def_foot_xy_vel, (m.fe, m.cp, xy_set))
+
+        def def_gamma(m, fe, cp, i):  # this sets gamma to the biggest of vx + vy
+            if (fe == 1 and cp < ncp):
+                return Constraint.Skip
+            vx, vy = foot_xy_vel[fe, cp, 'x'], foot_xy_vel[fe, cp, 'y']
+            return gamma[fe, cp] >= vx * self.D[i, 0] + vy * self.D[i, 1]
+
+        add_constraints('gamma_constr', def_gamma, (m.fe, m.cp, fric_set))
+
+        if not self.disable_lcp_constraints:
             GRFxy = self.pyomo_vars['GRFxy']
             GRFz = self.pyomo_vars['GRFz']
-
-            foot_xy_vel = self.pyomo_vars['foot_xy_vel']
-            gamma = self.pyomo_vars['gamma']
 
             contact_penalty = self.pyomo_vars['contact_penalty']
             friction_penalty = self.pyomo_vars['friction_penalty']
             slip_penalty = self.pyomo_vars['slip_penalty']
-
-            self.foot_xy_vel_func = utils.lambdify_EOM(self.Pb_I_vel[:2], sp_variables)
-
-            def def_foot_xy_vel(m, fe, cp, xy):  # foot velocity in xy-plane
-                if (fe == 1 and cp < ncp):
-                    return Constraint.Skip
-                i = 0 if xy == 'x' else 1
-                return foot_xy_vel[fe, cp, xy] == self.foot_xy_vel_func[i](pyo_variables[fe, cp])
-
-            add_constraints('foot_xy_vel_constr', def_foot_xy_vel, (m.fe, m.cp, xy_set))
-
-            def def_gamma(m, fe, cp, i):  # this sets gamma to the biggest of vx + vy
-                if (fe == 1 and cp < ncp):
-                    return Constraint.Skip
-                vx, vy = foot_xy_vel[fe, cp, 'x'], foot_xy_vel[fe, cp, 'y']
-                return gamma[fe, cp] >= vx * self.D[i, 0] + vy * self.D[i, 1]
-
-            add_constraints('gamma_constr', def_gamma, (m.fe, m.cp, fric_set))
 
             def def_friction_polyhedron(m, fe, cp):
                 if (fe == 1 and cp < ncp):
