@@ -3,13 +3,7 @@ from typing_extensions import Literal, TypedDict
 import sympy as sp
 import numpy as np
 
-from pyomo.environ import (
-    ConcreteModel,
-    Param,
-    Set,
-    Var,
-    Constraint,
-)
+from pyomo.environ import (ConcreteModel, Param, Set, Var, Constraint, sqrt)
 from sympy import Matrix as Mat
 from .system import System3D, System2D
 from .links import Link3D, Link2D
@@ -518,6 +512,8 @@ class Foot3D:
         friction_coeff = self.pyomo_params['friction_coeff']
         m = friction_coeff.model()
 
+        GRFxy = self.pyomo_vars['GRFxy']
+        GRFz = self.pyomo_vars['GRFz']
         foot_height = self.pyomo_vars['foot_height']
         foot_xy_vel = self.pyomo_vars['foot_xy_vel']
         foot_z_vel = self.pyomo_vars['foot_z_vel']
@@ -562,20 +558,17 @@ class Foot3D:
 
         add_constraints('gamma_constr', def_gamma, (m.fe, m.cp, fric_set))
 
-        if not self.disable_lcp_constraints:
-            GRFxy = self.pyomo_vars['GRFxy']
-            GRFz = self.pyomo_vars['GRFz']
+        def def_friction_polyhedron(m, fe, cp):
+            if (fe == 1 and cp < ncp):
+                return Constraint.Skip
+            return friction_coeff * GRFz[fe, cp] >= sum(GRFxy[fe, cp, :])
 
+        add_constraints('friction_polyhedron_constr', def_friction_polyhedron, (m.fe, m.cp))
+
+        if not self.disable_lcp_constraints:
             contact_penalty = self.pyomo_vars['contact_penalty']
             friction_penalty = self.pyomo_vars['friction_penalty']
             slip_penalty = self.pyomo_vars['slip_penalty']
-
-            def def_friction_polyhedron(m, fe, cp):
-                if (fe == 1 and cp < ncp):
-                    return Constraint.Skip
-                return friction_coeff * GRFz[fe, cp] >= sum(GRFxy[fe, cp, :])
-
-            add_constraints('friction_polyhedron_constr', def_friction_polyhedron, (m.fe, m.cp))
 
             # complementarity equations
             # z[i+1]*GRFz[i] ≈ 0
